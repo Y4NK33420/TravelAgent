@@ -318,6 +318,7 @@ Start with MVP:
 
 ---
 
+
 **Ready to proceed once you provide Supabase credentials! 🚀**
 
 
