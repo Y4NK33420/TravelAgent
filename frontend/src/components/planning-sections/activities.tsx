@@ -4,22 +4,7 @@ import { Star, MapPin, Clock, Mountain, Heart, Plus, Users, Calendar } from 'luc
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-
-interface Activity {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  suggested: number; // 1-100
-  price: string;
-  rating: number;
-  duration: string;
-  groupSize: string;
-  difficulty: 'Easy' | 'Moderate' | 'Challenging';
-  type: 'outdoor' | 'cultural' | 'adventure' | 'tour' | 'workshop';
-  location: string;
-  includes: string[];
-}
+import { mapPOIToActivity, Activity } from '../../utils/poi-mapper';
 
 interface ActivitiesSectionProps {
   planningData: any;
@@ -44,111 +29,7 @@ const mockActivities: Activity[] = [
     location: 'Agra, Uttar Pradesh',
     includes: ['Hotel pickup', 'Expert guide', 'Entry tickets', 'Breakfast']
   },
-  {
-    id: '2',
-    name: 'Old Delhi Rickshaw & Food Walk',
-    description: 'Street food tasting and heritage lanes of Old Delhi',
-    image: 'https://images.unsplash.com/photo-1569949381669-ecf31ae8e613?w=800&h=600&fit=crop',
-    suggested: 92,
-    price: '₹1500-2000',
-    rating: 4.7,
-    duration: '3.5 hours',
-    groupSize: '4-12 people',
-    difficulty: 'Easy',
-    type: 'cultural',
-    location: 'Old Delhi',
-    includes: ['Rickshaw ride', 'Food tastings', 'Local guide', 'Water']
-  },
-  {
-    id: '3',
-    name: 'Jaipur City Palace & Amber Fort',
-    description: 'Architectural wonders and royal history in Jaipur',
-    image: 'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=800&h=600&fit=crop',
-    suggested: 89,
-    price: '₹3000-4500',
-    rating: 4.6,
-    duration: '8 hours',
-    groupSize: '10-30 people',
-    difficulty: 'Moderate',
-    type: 'tour',
-    location: 'Jaipur, Rajasthan',
-    includes: ['Transport', 'Entry tickets', 'Lunch', 'Guide']
-  },
-  {
-    id: '4',
-    name: 'Ganges Sunrise Boat Ride',
-    description: 'Serene boat ride on the Ganges with sunrise rituals',
-    image: 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?w=800&h=600&fit=crop',
-    suggested: 87,
-    price: '₹800-1200',
-    rating: 4.9,
-    duration: '2 hours',
-    groupSize: '2-20 people',
-    difficulty: 'Easy',
-    type: 'cultural',
-    location: 'Varanasi, Uttar Pradesh',
-    includes: ['Boat ride', 'Guide', 'Chai tea', 'Aarti viewing']
-  },
-  {
-    id: '5',
-    name: 'Bollywood Studio Tour',
-    description: 'Behind-the-scenes look at India\'s film industry',
-    image: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=800&h=600&fit=crop',
-    suggested: 83,
-    price: '₹2000-3000',
-    rating: 4.4,
-    duration: '3 hours',
-    groupSize: '10-40 people',
-    difficulty: 'Easy',
-    type: 'adventure',
-    location: 'Mumbai, Maharashtra',
-    includes: ['Studio access', 'Guide', 'Photo opportunities', 'Refreshments']
-  },
-  {
-    id: '6',
-    name: 'Indian Cooking Class',
-    description: 'Hands-on class cooking regional Indian dishes',
-    image: 'https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=800&h=600&fit=crop',
-    suggested: 81,
-    price: '₹2500-3500',
-    rating: 4.8,
-    duration: '3 hours',
-    groupSize: '4-12 people',
-    difficulty: 'Moderate',
-    type: 'workshop',
-    location: 'Various Cities',
-    includes: ['All ingredients', 'Chef instruction', 'Recipe book', 'Meal']
-  },
-  {
-    id: '7',
-    name: 'Rajasthan Desert Safari',
-    description: 'Camel ride through the Thar Desert with sunset views',
-    image: 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?w=800&h=600&fit=crop',
-    suggested: 78,
-    price: '₹3500-5000',
-    rating: 4.5,
-    duration: '5 hours',
-    groupSize: '6-20 people',
-    difficulty: 'Moderate',
-    type: 'outdoor',
-    location: 'Jaisalmer, Rajasthan',
-    includes: ['Camel ride', 'Guide', 'Dinner', 'Cultural performance']
-  },
-  {
-    id: '8',
-    name: 'Kerala Backwaters Cruise',
-    description: 'Relaxing houseboat journey through scenic waterways',
-    image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&h=600&fit=crop',
-    suggested: 75,
-    price: '₹5000-8000',
-    rating: 4.6,
-    duration: '6 hours',
-    groupSize: '2-10 people',
-    difficulty: 'Easy',
-    type: 'tour',
-    location: 'Alleppey, Kerala',
-    includes: ['Houseboat', 'Lunch', 'Guide', 'Refreshments']
-  }
+  // ... (keep one or two mocks as fallback)
 ];
 
 export function ActivitiesSection({ planningData, onSelectionChange, isTransitioning }: ActivitiesSectionProps) {
@@ -160,9 +41,24 @@ export function ActivitiesSection({ planningData, onSelectionChange, isTransitio
     }
   };
 
+  // Filter and map real POIs to activities
+  let realActivities: Activity[] = [];
+  if (planningData?.activities && planningData.activities.length > 0) {
+    realActivities = planningData.activities.map(mapPOIToActivity);
+  } else if (planningData?.pois) {
+    realActivities = planningData.pois
+      .filter((p: any) => p.category?.some((c: string) =>
+        ['tour', 'museum', 'park', 'adventure', 'hiking', 'workshop', 'culture', 'landmark'].some(k => c.toLowerCase().includes(k))
+      ))
+      .map(mapPOIToActivity) || [];
+  }
+
+  // Use real activities if available, otherwise fallback to mock
+  const activitiesToDisplay = realActivities.length > 0 ? realActivities : mockActivities;
+
   const topSuggestionCount = getTopSuggestionCount(planningData.tripStyle);
-  const sortedActivities = [...mockActivities].sort((a, b) => b.suggested - a.suggested);
-  
+  const sortedActivities = [...activitiesToDisplay].sort((a, b) => b.suggested - a.suggested);
+
   // Pre-select top AI suggestions by default
   const defaultSelections = sortedActivities.slice(0, topSuggestionCount).map(a => a.id);
   const [selectedActivities, setSelectedActivities] = useState<string[]>(defaultSelections);
@@ -173,13 +69,13 @@ export function ActivitiesSection({ planningData, onSelectionChange, isTransitio
     const newDefaultSelections = sortedActivities.slice(0, topSuggestionCount).map(a => a.id);
     setSelectedActivities(newDefaultSelections);
     onSelectionChange(newDefaultSelections);
-  }, [planningData?.tripStyle]);
+  }, [planningData?.tripStyle, planningData?.pois]);
 
   const handleToggleActivity = (activityId: string) => {
     const newSelection = selectedActivities.includes(activityId)
       ? selectedActivities.filter(id => id !== activityId)
       : [...selectedActivities, activityId];
-    
+
     setSelectedActivities(newSelection);
     onSelectionChange(newSelection);
   };
@@ -220,7 +116,7 @@ export function ActivitiesSection({ planningData, onSelectionChange, isTransitio
         >
           <Mountain className="w-8 h-8 text-green-400" />
         </motion.div>
-        
+
         <h2 className="text-3xl text-white mb-4">
           Adventure Awaits
         </h2>
@@ -247,11 +143,10 @@ export function ActivitiesSection({ planningData, onSelectionChange, isTransitio
               onHoverEnd={() => setHoveredActivity(null)}
               className="group"
             >
-              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${
-                isSelected 
-                  ? 'ring-2 ring-green-400 bg-green-500/10' 
-                  : 'bg-black/20 hover:bg-black/30'
-              } backdrop-blur-sm border-white/10`}>
+              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${isSelected
+                ? 'ring-2 ring-green-400 bg-green-500/10'
+                : 'bg-black/20 hover:bg-black/30'
+                } backdrop-blur-sm border-white/10`}>
                 <div className="relative">
                   {/* Image */}
                   <div className="aspect-video overflow-hidden">
@@ -359,8 +254,8 @@ export function ActivitiesSection({ planningData, onSelectionChange, isTransitio
                       size="sm"
                       variant={isSelected ? "default" : "outline"}
                       onClick={() => handleToggleActivity(activity.id)}
-                      className={isSelected 
-                        ? "bg-green-600 hover:bg-green-700 text-white" 
+                      className={isSelected
+                        ? "bg-green-600 hover:bg-green-700 text-white"
                         : "border-white/20 text-white hover:bg-white/10"
                       }
                     >

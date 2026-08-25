@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Toaster } from './components/ui/sonner';
+import { AuthProvider } from './contexts/AuthContext';
 import { HeroSection } from './components/hero-section';
 import { Navbar } from './components/navbar';
 import { TripsCarousel } from './components/trips-carousel';
@@ -36,32 +38,33 @@ export default function App() {
     setPlanningData(null);
   };
 
-  if (currentView === 'planning') {
-    return (
-      <PlanningFlow 
-        initialData={planningData}
-        onComplete={handlePlanningComplete}
-        onBack={handleBackToHome}
-      />
-    );
-  }
-
-  if (currentView === 'trip-plan') {
-    return (
-      <TripPlan 
-        tripData={tripData} 
-        onEdit={(section, data) => console.log('Edit:', section, data)}
-        onClose={handleBackToHome}
-      />
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-white relative">
-      <Navbar />
-      <HeroSection onStartPlanning={handleStartPlanning} onViewTripPlan={handleViewTripPlan} />
-      <TripsCarousel />
-      <FeatureImageSection />
-    </div>
+    <AuthProvider>
+      {currentView === 'planning' && (
+        <PlanningFlow
+          initialData={planningData}
+          onComplete={handlePlanningComplete}
+          onBack={handleBackToHome}
+        />
+      )}
+
+      {currentView === 'trip-plan' && (
+        <TripPlan
+          tripData={tripData}
+          onEdit={(section, data) => console.log('Edit:', section, data)}
+          onClose={handleBackToHome}
+        />
+      )}
+
+      {currentView === 'home' && (
+        <div className="min-h-screen bg-white relative">
+          <Navbar />
+          <HeroSection onStartPlanning={handleStartPlanning} onViewTripPlan={handleViewTripPlan} />
+          <TripsCarousel />
+          <FeatureImageSection />
+          <Toaster />
+        </div>
+      )}
+    </AuthProvider>
   );
 }

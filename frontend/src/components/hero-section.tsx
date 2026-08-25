@@ -8,7 +8,7 @@ import { Plane, MapPin, Camera, Compass, Mountain, Palmtree, Building2, Car, Spa
 const generateFloatingIcon = (Icon: any, index: number) => {
   const seed = index * 1337; // Use index-based seed for consistent but different positioning
   const pseudoRandom = (offset: number) => ((seed + offset) * 9301 + 49297) % 233280 / 233280;
-  
+
   return {
     Icon,
     id: index,
@@ -25,7 +25,7 @@ const generateFloatingIcon = (Icon: any, index: number) => {
 };
 
 const floatingIcons = [
-  Plane, MapPin, Camera, Compass, Mountain, 
+  Plane, MapPin, Camera, Compass, Mountain,
   Palmtree, Building2, Car, Globe, Heart
 ].map((Icon, index) => generateFloatingIcon(Icon, index));
 
@@ -54,8 +54,8 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
   const [typewriterCompleted, setTypewriterCompleted] = useState(false);
   const [showCarousel, setShowCarousel] = useState(false);
   const [currentDestination, setCurrentDestination] = useState<any>(null);
-  
-  const ref = useRef(null);
+
+  const ref = useRef<HTMLDivElement>(null);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   const springX = useSpring(mouseX, { stiffness: 100, damping: 20 });
@@ -65,7 +65,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
     target: ref,
     offset: ["start start", "end start"]
   });
-  
+
   const y = useTransform(scrollYProgress, [0, 1], [0, -300]);
   const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
   const scale = useTransform(scrollYProgress, [0, 0.8], [1, 0.9]);
@@ -87,8 +87,8 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
 
   useEffect(() => {
     setTypewriterCompleted(false);
-    let cursorTimer;
-    let typingInterval;
+    let cursorTimer: any;
+    let typingInterval: any;
 
     const startTypingTimer = setTimeout(() => {
       let index = 0;
@@ -110,7 +110,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
 
     return () => {
       clearTimeout(startTypingTimer);
-      if(typingInterval) clearInterval(typingInterval);
+      if (typingInterval) clearInterval(typingInterval);
       if (cursorTimer) clearInterval(cursorTimer);
     };
   }, []);
@@ -135,12 +135,12 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
   const handleSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
       setIsTransitioning(true);
-      
+
       // Smooth transition animation
       setTimeout(() => {
         setIsExpanding(true);
       }, 300);
-      
+
       // Start planning flow with user's query
       setTimeout(() => {
         if (onStartPlanning) {
@@ -168,8 +168,8 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
 
   return (
     <>
-      <div 
-        ref={ref} 
+      <div
+        ref={ref}
         className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900"
         onMouseMove={handleMouseMove}
       >
@@ -189,7 +189,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
 
         {/* Original background with fade out when carousel starts */}
         <motion.div
-          animate={{ 
+          animate={{
             opacity: showCarousel ? 0 : 1,
             scale: showCarousel ? 1.1 : 1
           }}
@@ -200,7 +200,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
         {/* Animated background grid - fades with original background */}
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ 
+          animate={{
             opacity: showCarousel ? 0 : 0.1
           }}
           transition={{ duration: 2 }}
@@ -219,9 +219,9 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
           {!showCarousel && backgroundParticles.map((particle) => (
             <motion.div
               key={particle.id}
-              className="absolute z-[3]"
+              className="absolute rounded-full bg-white"
               initial={{ opacity: 0, scale: 0 }}
-              animate={{ 
+              animate={{
                 opacity: [0, 0.6, 0],
                 scale: [0, 1, 0],
                 y: [0, -100, -200]
@@ -233,7 +233,6 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 repeat: Infinity,
                 ease: "easeInOut"
               }}
-              className="absolute rounded-full bg-white"
               style={{
                 left: `${particle.x}%`,
                 top: `${particle.y}%`,
@@ -251,14 +250,14 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
             return (
               <motion.div
                 key={item.id}
-                initial={{ 
-                  opacity: 0, 
-                  scale: 0, 
-                  x: item.startX, 
+                initial={{
+                  opacity: 0,
+                  scale: 0,
+                  x: item.startX,
                   y: item.startY,
                   rotate: 0
                 }}
-                animate={{ 
+                animate={{
                   opacity: [0, item.opacity, item.opacity, 0],
                   scale: [0, item.scale, item.scale, 0],
                   x: [item.startX, item.endX, item.startX],
@@ -281,7 +280,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                   y: springY
                 }}
               >
-                <motion.div 
+                <motion.div
                   animate={{
                     scale: [1, 1.1, 1],
                   }}
@@ -301,7 +300,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
         </AnimatePresence>
 
         {/* Main content */}
-        <motion.div 
+        <motion.div
           style={{ y, opacity, scale }}
           animate={{
             opacity: isExpanding ? 0 : 1,
@@ -338,7 +337,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
               />
             )}
           </AnimatePresence>
-          
+
           {/* Static glass background for when carousel isn't showing */}
           <AnimatePresence>
             {!showCarousel && (
@@ -374,22 +373,22 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-4 relative">
               <motion.span
                 key={currentDestination?.id || 'default'}
-                initial={{ 
+                initial={{
                   backgroundSize: typewriterCompleted ? "100% 100%" : "0% 100%",
                   opacity: typewriterCompleted ? 0 : 1
                 }}
-                animate={{ 
+                animate={{
                   backgroundSize: "100% 100%",
                   opacity: 1
                 }}
-                transition={{ 
-                  duration: typewriterCompleted ? 0.6 : 2, 
-                  delay: typewriterCompleted ? 0.2 : 2, 
-                  ease: "easeInOut" 
+                transition={{
+                  duration: typewriterCompleted ? 0.6 : 2,
+                  delay: typewriterCompleted ? 0.2 : 2,
+                  ease: "easeInOut"
                 }}
                 className="bg-gradient-to-r bg-clip-text text-transparent"
                 style={{
-                  backgroundImage: showCarousel && currentDestination 
+                  backgroundImage: showCarousel && currentDestination
                     ? currentDestination.colorPalette.gradient
                     : "linear-gradient(90deg, #60A5FA, #A78BFA, #F472B6)",
                   backgroundRepeat: "no-repeat",
@@ -400,8 +399,8 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
               <motion.span
                 animate={{ opacity: showCursor ? 1 : 0 }}
                 style={{
-                  color: showCarousel && currentDestination 
-                    ? currentDestination.colorPalette.primary 
+                  color: showCarousel && currentDestination
+                    ? currentDestination.colorPalette.primary
                     : "#60A5FA"
                 }}
               >
@@ -417,8 +416,8 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
             transition={{ duration: 0.8, delay: 3, ease: "easeOut" }}
             className="text-lg sm:text-xl mb-12 max-w-xl mx-auto"
             style={{
-              color: showCarousel && currentDestination 
-                ? currentDestination.colorPalette.text 
+              color: showCarousel && currentDestination
+                ? currentDestination.colorPalette.text
                 : "#D1D5DB"
             }}
           >
@@ -434,15 +433,15 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
           {/* Enhanced search input */}
           <motion.div
             initial={{ opacity: 0, scale: 0.8, y: 50 }}
-            animate={{ 
-              opacity: isExpanding ? 0 : 1, 
+            animate={{
+              opacity: isExpanding ? 0 : 1,
               scale: isExpanding ? 0.9 : 1,
               y: isExpanding ? -20 : 0
             }}
-            transition={{ 
-              duration: isExpanding ? 0.4 : 1.2, 
-              delay: isExpanding ? 0 : 4, 
-              ease: "easeOut" 
+            transition={{
+              duration: isExpanding ? 0.4 : 1.2,
+              delay: isExpanding ? 0 : 4,
+              ease: "easeOut"
             }}
             className="relative max-w-2xl mx-auto"
           >
@@ -450,40 +449,40 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
             <motion.div
               key={currentDestination?.id || 'default'}
               initial={{ opacity: 0 }}
-              animate={{ 
+              animate={{
                 opacity: showCarousel ? (isTransitioning ? 0.9 : 0.7) : (isTransitioning ? 0.8 : 0.5),
               }}
-              transition={{ 
-                duration: 0.6, 
+              transition={{
+                duration: 0.6,
                 delay: 4.5,
                 ease: "easeOut"
               }}
               className="absolute -inset-1 rounded-3xl blur-xl"
               style={{
-                background: showCarousel && currentDestination 
+                background: showCarousel && currentDestination
                   ? currentDestination.colorPalette.gradient
                   : "linear-gradient(to right, #3B82F6, #8B5CF6, #EC4899)"
               }}
             />
-            
+
             <div className="relative">
               <motion.input
                 key={currentDestination?.id || 'default'}
                 whileFocus={{ scale: 1.02 }}
-                initial={{ 
+                initial={{
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   borderColor: 'rgba(255, 255, 255, 0.2)'
                 }}
                 animate={{
                   scale: isTransitioning ? 1.08 : 1,
-                  backgroundColor: showCarousel 
-                    ? 'rgba(0, 0, 0, 0.4)' 
+                  backgroundColor: showCarousel
+                    ? 'rgba(0, 0, 0, 0.4)'
                     : 'rgba(255, 255, 255, 0.1)',
                   borderColor: showCarousel && currentDestination
                     ? `${currentDestination.colorPalette.primary}40`
                     : 'rgba(255, 255, 255, 0.2)'
                 }}
-                transition={{ 
+                transition={{
                   duration: 0.6,
                   ease: "easeOut"
                 }}
@@ -494,11 +493,11 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 placeholder="Describe your dream destination..."
                 className="w-full pl-12 pr-20 py-5 text-lg backdrop-blur-xl border-2 rounded-2xl text-white placeholder-gray-300 focus:outline-none relative z-10"
                 onFocus={(e) => {
-                  e.target.style.borderColor = showCarousel && currentDestination 
-                    ? currentDestination.colorPalette.primary 
+                  e.target.style.borderColor = showCarousel && currentDestination
+                    ? currentDestination.colorPalette.primary
                     : '#60A5FA';
-                  e.target.style.boxShadow = `0 0 0 4px ${showCarousel && currentDestination 
-                    ? currentDestination.colorPalette.primary + '33' 
+                  e.target.style.boxShadow = `0 0 0 4px ${showCarousel && currentDestination
+                    ? currentDestination.colorPalette.primary + '33'
                     : 'rgba(96, 165, 250, 0.2)'}`;
                 }}
                 onBlur={(e) => {
@@ -509,7 +508,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 }}
                 disabled={isTransitioning}
               />
-              
+
               {/* Search icon */}
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
@@ -518,11 +517,11 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 className="absolute left-4 top-1/2 transform -translate-y-1/2"
               >
                 <motion.div
-                  animate={{ 
+                  animate={{
                     rotate: isTransitioning ? 360 : 0,
                     scale: isTransitioning ? [1, 1.2, 1] : 1
                   }}
-                  transition={{ 
+                  transition={{
                     rotate: { duration: 2, ease: "easeInOut" },
                     scale: { duration: 0.5, repeat: isTransitioning ? Infinity : 0 }
                   }}
@@ -561,15 +560,15 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                           : 'rgba(96, 165, 250, 0.3)'
                       }}
                     >
-                      <Send 
-                        className="w-4 h-4" 
+                      <Send
+                        className="w-4 h-4"
                         style={{
                           color: showCarousel && currentDestination
                             ? currentDestination.colorPalette.text
                             : '#93C5FD'
                         }}
                       />
-                      <span 
+                      <span
                         className="text-sm"
                         style={{
                           color: showCarousel && currentDestination
@@ -622,7 +621,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 className="mt-12 text-center"
               >
                 <motion.div
-                  animate={{ 
+                  animate={{
                     scale: [1, 1.1, 1],
                     rotate: [0, 5, -5, 0]
                   }}
@@ -642,7 +641,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                   className="text-lg"
                   style={{
                     color: showCarousel && currentDestination
-                      ? `${currentDestination.colorPalette.text}AA`  
+                      ? `${currentDestination.colorPalette.text}AA`
                       : '#9CA3AF'
                   }}
                 >
@@ -662,12 +661,12 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 <motion.div
                   key={ring}
                   initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ 
+                  animate={{
                     opacity: [0, 0.4, 0],
                     scale: [0.8, 2.5, 4]
                   }}
                   exit={{ opacity: 0 }}
-                  transition={{ 
+                  transition={{
                     duration: 0.8,
                     delay: ring * 0.05,
                     ease: [0.25, 0.1, 0.25, 1]
@@ -676,9 +675,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                   style={{
                     borderColor: showCarousel && currentDestination
                       ? `${currentDestination.colorPalette.primary}33`
-                      : 'rgba(96, 165, 250, 0.2)'
-                  }}
-                  style={{
+                      : 'rgba(96, 165, 250, 0.2)',
                     left: '50%',
                     top: '50%',
                     transform: 'translate(-50%, -50%)',
@@ -687,20 +684,20 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                   }}
                 />
               ))}
-              
+
               {/* Gentle particle burst */}
               {Array.from({ length: 12 }).map((_, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, scale: 0 }}
-                  animate={{ 
+                  animate={{
                     opacity: [0, 0.8, 0],
                     scale: [0, 1, 0],
                     x: Math.cos((i / 12) * Math.PI * 2) * 150,
                     y: Math.sin((i / 12) * Math.PI * 2) * 150
                   }}
                   exit={{ opacity: 0 }}
-                  transition={{ 
+                  transition={{
                     duration: 0.6,
                     delay: i * 0.02,
                     ease: "easeOut"
@@ -709,9 +706,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                   style={{
                     backgroundColor: showCarousel && currentDestination
                       ? `${currentDestination.colorPalette.primary}99`
-                      : 'rgba(96, 165, 250, 0.6)'
-                  }}
-                  style={{
+                      : 'rgba(96, 165, 250, 0.6)',
                     left: '50%',
                     top: '50%'
                   }}
@@ -725,16 +720,16 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
         <AnimatePresence>
           {isExpanding && (
             <motion.div
-              initial={{ 
+              initial={{
                 clipPath: "circle(0% at 50% 50%)"
               }}
-              animate={{ 
+              animate={{
                 clipPath: "circle(100% at 50% 50%)"
               }}
-              exit={{ 
+              exit={{
                 opacity: 0
               }}
-              transition={{ 
+              transition={{
                 duration: 1.2,
                 ease: [0.25, 0.1, 0.25, 1]
               }}
@@ -745,21 +740,21 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -30 }}
-                transition={{ 
-                  delay: 0.6, 
+                transition={{
+                  delay: 0.6,
                   duration: 0.5,
                   ease: "easeOut"
                 }}
                 className="text-center text-white"
               >
                 <motion.div
-                  animate={{ 
+                  animate={{
                     scale: [1, 1.05, 1]
                   }}
-                  transition={{ 
-                    duration: 2, 
-                    repeat: Infinity, 
-                    ease: "easeInOut" 
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
                   }}
                   className="text-4xl font-bold mb-4"
                 >
@@ -767,18 +762,18 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
                 </motion.div>
                 <motion.p
                   animate={{ opacity: [0.8, 1, 0.8] }}
-                  transition={{ 
-                    duration: 1.5, 
-                    repeat: Infinity, 
-                    ease: "easeInOut" 
+                  transition={{
+                    duration: 1.5,
+                    repeat: Infinity,
+                    ease: "easeInOut"
                   }}
                   className="text-xl"
                 >
                   Analyzing your preferences...
                 </motion.p>
-                
+
                 {/* Smooth progress indicator */}
-                <motion.div 
+                <motion.div
                   className="mt-8 w-32 h-1 bg-white/20 rounded-full overflow-hidden mx-auto"
                 >
                   <motion.div
@@ -822,7 +817,7 @@ export function HeroSection({ onStartPlanning, onViewTripPlan }: HeroSectionProp
       {/* Planning Interface Overlay */}
       <AnimatePresence>
         {isPlanning && (
-          <PlanningInterface 
+          <PlanningInterface
             initialQuery={searchQuery}
             onClose={handleClosePlanning}
             onViewTripPlan={onViewTripPlan}

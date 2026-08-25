@@ -4,22 +4,7 @@ import { Star, MapPin, Clock, Waves, Heart, Plus, Leaf, Sparkles } from 'lucide-
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-
-interface WellnessLocation {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  suggested: number; // 1-100
-  price: string;
-  rating: number;
-  location: string;
-  type: 'spa' | 'park' | 'garden' | 'beach' | 'thermal' | 'yoga';
-  duration: string;
-  features: string[];
-  atmosphere: string;
-  bestTime: string;
-}
+import { mapPOIToWellness, WellnessLocation } from '../../utils/poi-mapper';
 
 interface WellnessSectionProps {
   planningData: any;
@@ -44,111 +29,7 @@ const mockWellnessLocations: WellnessLocation[] = [
     atmosphere: 'Serene and historic',
     bestTime: 'Early morning or evening'
   },
-  {
-    id: '2',
-    name: 'Ananda in the Himalayas',
-    description: 'Luxury wellness retreat with Ayurvedic treatments and yoga',
-    image: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800&h=600&fit=crop',
-    suggested: 89,
-    price: '₹25000-50000',
-    rating: 4.9,
-    location: 'Rishikesh, Uttarakhand',
-    type: 'spa',
-    duration: '2-4 hours',
-    features: ['Ayurvedic Treatments', 'Yoga', 'Meditation', 'Himalayan Views'],
-    atmosphere: 'Ultra-luxurious and tranquil',
-    bestTime: 'Any time'
-  },
-  {
-    id: '3',
-    name: 'Cubbon Park',
-    description: 'Sprawling urban park perfect for morning walks and relaxation',
-    image: 'https://images.unsplash.com/photo-1524396309943-e03f5249f002?w=800&h=600&fit=crop',
-    suggested: 92,
-    price: 'Free',
-    rating: 4.5,
-    location: 'Bangalore, Karnataka',
-    type: 'park',
-    duration: '1-2 hours',
-    features: ['Green Spaces', 'Walking Paths', 'Historic Buildings', 'Fresh Air'],
-    atmosphere: 'Peaceful and refreshing',
-    bestTime: 'Early morning'
-  },
-  {
-    id: '4',
-    name: 'Ayurvedic Spa at Taj',
-    description: 'Traditional Ayurvedic treatments and therapies',
-    image: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800&h=600&fit=crop',
-    suggested: 86,
-    price: '₹3000-8000',
-    rating: 4.4,
-    location: 'Multiple Locations',
-    type: 'spa',
-    duration: '2-3 hours',
-    features: ['Ayurvedic Massage', 'Herbal Treatments', 'Steam Baths', 'Wellness Consultation'],
-    atmosphere: 'Traditional and healing',
-    bestTime: 'Afternoon'
-  },
-  {
-    id: '5',
-    name: 'Hanging Gardens',
-    description: 'Terraced gardens with sunset views over Arabian Sea',
-    image: 'https://images.unsplash.com/photo-1524396309943-e03f5249f002?w=800&h=600&fit=crop',
-    suggested: 83,
-    price: 'Free',
-    rating: 4.6,
-    location: 'Malabar Hill, Mumbai',
-    type: 'garden',
-    duration: '1-2 hours',
-    features: ['Sunset Views', 'Terraced Gardens', 'Sea Breeze', 'Photo Spots'],
-    atmosphere: 'Romantic and peaceful',
-    bestTime: 'Evening for sunset'
-  },
-  {
-    id: '6',
-    name: 'Isha Yoga Center',
-    description: 'Spiritual center offering yoga and meditation programs',
-    image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&h=600&fit=crop',
-    suggested: 78,
-    price: '₹500-2000/class',
-    rating: 4.5,
-    location: 'Coimbatore, Tamil Nadu',
-    type: 'yoga',
-    duration: '1-3 hours',
-    features: ['Yoga Programs', 'Meditation', 'Spiritual Guidance', 'Peaceful Setting'],
-    atmosphere: 'Spiritual and centered',
-    bestTime: 'Morning or evening'
-  },
-  {
-    id: '7',
-    name: 'Seine Riverbank Walks',
-    description: 'Peaceful walks along the historic Seine River with beautiful views',
-    image: 'https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=800&h=600&fit=crop',
-    suggested: 81,
-    price: 'Free',
-    rating: 4.3,
-    location: 'Various locations along Seine',
-    type: 'park',
-    duration: '1-3 hours',
-    features: ['River Views', 'Historic Bridges', 'Peaceful Walking', 'Photography Spots'],
-    atmosphere: 'Romantic and calming',
-    bestTime: 'Sunset or early morning'
-  },
-  {
-    id: '8',
-    name: 'Spa Caudalie at Plaza Athénée',
-    description: 'Vinotherapy spa treatments in luxurious Parisian setting',
-    image: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=800&h=600&fit=crop',
-    suggested: 75,
-    price: '€180-450',
-    rating: 4.8,
-    location: 'Champs-Élysées, 8th arrondissement',
-    type: 'spa',
-    duration: '2-5 hours',
-    features: ['Vinotherapy', 'Luxury Treatments', 'Premium Products', 'Expert Therapists'],
-    atmosphere: 'Exclusive and rejuvenating',
-    bestTime: 'Any time'
-  }
+  // ... (keep one or two mocks as fallback)
 ];
 
 export function WellnessSection({ planningData, onSelectionChange, isTransitioning }: WellnessSectionProps) {
@@ -160,9 +41,20 @@ export function WellnessSection({ planningData, onSelectionChange, isTransitioni
     }
   };
 
+  // Filter and map real POIs to wellness
+  const realWellness = planningData?.wellness?.map(mapPOIToWellness) ||
+    planningData?.pois
+      ?.filter((p: any) => p.category?.some((c: string) =>
+        ['spa', 'park', 'gym', 'beauty_salon', 'hair_care', 'health', 'garden', 'beach'].some(k => c.toLowerCase().includes(k))
+      ))
+      .map(mapPOIToWellness) || [];
+
+  // Use real wellness if available, otherwise fallback to mock
+  const wellnessToDisplay = realWellness.length > 0 ? realWellness : mockWellnessLocations;
+
   const topSuggestionCount = getTopSuggestionCount(planningData.tripStyle);
-  const sortedWellness = [...mockWellnessLocations].sort((a, b) => b.suggested - a.suggested);
-  
+  const sortedWellness = [...wellnessToDisplay].sort((a, b) => b.suggested - a.suggested);
+
   // Pre-select top AI suggestions by default
   const defaultSelections = sortedWellness.slice(0, topSuggestionCount).map(w => w.id);
   const [selectedWellness, setSelectedWellness] = useState<string[]>(defaultSelections);
@@ -173,13 +65,13 @@ export function WellnessSection({ planningData, onSelectionChange, isTransitioni
     const newDefaultSelections = sortedWellness.slice(0, topSuggestionCount).map(w => w.id);
     setSelectedWellness(newDefaultSelections);
     onSelectionChange(newDefaultSelections);
-  }, [planningData?.tripStyle]);
+  }, [planningData?.tripStyle, planningData?.pois]);
 
   const handleToggleWellness = (wellnessId: string) => {
     const newSelection = selectedWellness.includes(wellnessId)
       ? selectedWellness.filter(id => id !== wellnessId)
       : [...selectedWellness, wellnessId];
-    
+
     setSelectedWellness(newSelection);
     onSelectionChange(newSelection);
   };
@@ -224,7 +116,7 @@ export function WellnessSection({ planningData, onSelectionChange, isTransitioni
         >
           <Waves className="w-8 h-8 text-teal-400" />
         </motion.div>
-        
+
         <h2 className="text-3xl text-white mb-4">
           Wellness & Relaxation
         </h2>
@@ -252,11 +144,10 @@ export function WellnessSection({ planningData, onSelectionChange, isTransitioni
               onHoverEnd={() => setHoveredWellness(null)}
               className="group"
             >
-              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${
-                isSelected 
-                  ? 'ring-2 ring-teal-400 bg-teal-500/10' 
-                  : 'bg-black/20 hover:bg-black/30'
-              } backdrop-blur-sm border-white/10`}>
+              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${isSelected
+                ? 'ring-2 ring-teal-400 bg-teal-500/10'
+                : 'bg-black/20 hover:bg-black/30'
+                } backdrop-blur-sm border-white/10`}>
                 <div className="relative">
                   {/* Image */}
                   <div className="aspect-video overflow-hidden">
@@ -341,7 +232,7 @@ export function WellnessSection({ planningData, onSelectionChange, isTransitioni
 
                   {/* Features */}
                   <div className="flex flex-wrap gap-1 mb-4">
-                    {wellness.features.slice(0, 3).map((feature) => (
+                    {wellness.features.slice(0, 3).map((feature: string) => (
                       <Badge key={feature} variant="secondary" className="text-xs bg-white/10 text-white/70">
                         {feature}
                       </Badge>
@@ -366,8 +257,8 @@ export function WellnessSection({ planningData, onSelectionChange, isTransitioni
                       size="sm"
                       variant={isSelected ? "default" : "outline"}
                       onClick={() => handleToggleWellness(wellness.id)}
-                      className={isSelected 
-                        ? "bg-teal-600 hover:bg-teal-700 text-white" 
+                      className={isSelected
+                        ? "bg-teal-600 hover:bg-teal-700 text-white"
                         : "border-white/20 text-white hover:bg-white/10"
                       }
                     >

@@ -4,21 +4,7 @@ import { Star, MapPin, Clock, ShoppingBag, Heart, Plus, Euro, Gift } from 'lucid
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-
-interface ShoppingDestination {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  suggested: number; // 1-100
-  priceRange: string;
-  rating: number;
-  location: string;
-  type: 'luxury' | 'markets' | 'boutiques' | 'department' | 'vintage' | 'souvenirs';
-  specialties: string[];
-  hours: string;
-  atmosphere: string;
-}
+import { mapPOIToShopping, ShoppingDestination } from '../../utils/poi-mapper';
 
 interface ShoppingSectionProps {
   planningData: any;
@@ -42,104 +28,7 @@ const mockShoppingDestinations: ShoppingDestination[] = [
     hours: '10:00 - 20:00',
     atmosphere: 'Upscale and trendy'
   },
-  {
-    id: '2',
-    name: 'Chor Bazaar',
-    description: 'Famous flea market with antiques, vintage items, and collectibles',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 89,
-    priceRange: '₹₹',
-    rating: 4.4,
-    location: 'Mumbai',
-    type: 'vintage',
-    specialties: ['Antiques', 'Vintage Items', 'Collectibles', 'Furniture'],
-    hours: 'Mon-Sat: 11:00 - 19:00',
-    atmosphere: 'Eclectic and treasure-hunting'
-  },
-  {
-    id: '3',
-    name: 'Johari Bazaar',
-    description: 'Traditional jewelry market famous for precious gems and ornaments',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 92,
-    priceRange: '₹₹₹',
-    rating: 4.7,
-    location: 'Jaipur, Rajasthan',
-    type: 'boutiques',
-    specialties: ['Jewelry', 'Gemstones', 'Traditional Ornaments', 'Kundan Work'],
-    hours: '10:00 - 20:00',
-    atmosphere: 'Traditional and vibrant'
-  },
-  {
-    id: '4',
-    name: 'Select Citywalk',
-    description: 'Modern shopping mall with international and Indian brands',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 87,
-    priceRange: '₹₹₹₹',
-    rating: 4.5,
-    location: 'Saket, New Delhi',
-    type: 'department',
-    specialties: ['Fashion', 'Electronics', 'Dining', 'Entertainment'],
-    hours: '10:00 - 22:00',
-    atmosphere: 'Modern and spacious'
-  },
-  {
-    id: '5',
-    name: 'Dilli Haat',
-    description: 'Open-air market with handicrafts and regional specialties',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 78,
-    priceRange: '₹',
-    rating: 4.0,
-    location: 'INA, New Delhi',
-    type: 'souvenirs',
-    specialties: ['Handicrafts', 'Textiles', 'Regional Food', 'Souvenirs'],
-    hours: '10:30 - 22:00',
-    atmosphere: 'Cultural and authentic'
-  },
-  {
-    id: '6',
-    name: 'Colaba Causeway',
-    description: 'Bustling street market with fashion, accessories, and souvenirs',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 85,
-    priceRange: '₹₹',
-    rating: 4.6,
-    location: 'Colaba, Mumbai',
-    type: 'markets',
-    specialties: ['Street Fashion', 'Accessories', 'Art', 'Souvenirs'],
-    hours: '10:00 - 21:00',
-    atmosphere: 'Bustling and eclectic'
-  },
-  {
-    id: '7',
-    name: 'Marché Saint-Germain',
-    description: 'Covered market with specialty foods and local products',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 82,
-    priceRange: '€€',
-    rating: 4.3,
-    location: '6th arrondissement',
-    type: 'markets',
-    specialties: ['Gourmet Food', 'Local Products', 'Cheese', 'Wine'],
-    hours: 'Tue-Sat: 8:00 - 20:00',
-    atmosphere: 'Authentic and local'
-  },
-  {
-    id: '8',
-    name: 'L\'Avenue Montaigne',
-    description: 'Exclusive shopping street with the world\'s most prestigious brands',
-    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop',
-    suggested: 79,
-    priceRange: '€€€€€',
-    rating: 4.8,
-    location: '8th arrondissement',
-    type: 'luxury',
-    specialties: ['Haute Couture', 'Luxury Watches', 'Fine Jewelry', 'Designer Shoes'],
-    hours: '10:00 - 19:00',
-    atmosphere: 'Ultra-exclusive and refined'
-  }
+  // ... (keep one or two mocks as fallback)
 ];
 
 export function ShoppingSection({ planningData, onSelectionChange, isTransitioning }: ShoppingSectionProps) {
@@ -151,9 +40,13 @@ export function ShoppingSection({ planningData, onSelectionChange, isTransitioni
     }
   };
 
+  // Use real shopping if available, otherwise fallback to mock
+  const realShopping = planningData?.shopping?.map(mapPOIToShopping) || [];
+  const shoppingToDisplay = realShopping.length > 0 ? realShopping : mockShoppingDestinations;
+
   const topSuggestionCount = getTopSuggestionCount(planningData.tripStyle);
-  const sortedShopping = [...mockShoppingDestinations].sort((a, b) => b.suggested - a.suggested);
-  
+  const sortedShopping = [...shoppingToDisplay].sort((a, b) => b.suggested - a.suggested);
+
   // Pre-select top AI suggestions by default
   const defaultSelections = sortedShopping.slice(0, topSuggestionCount).map(s => s.id);
   const [selectedShopping, setSelectedShopping] = useState<string[]>(defaultSelections);
@@ -164,13 +57,13 @@ export function ShoppingSection({ planningData, onSelectionChange, isTransitioni
     const newDefaultSelections = sortedShopping.slice(0, topSuggestionCount).map(s => s.id);
     setSelectedShopping(newDefaultSelections);
     onSelectionChange(newDefaultSelections);
-  }, [planningData?.tripStyle]);
+  }, [planningData?.tripStyle, planningData?.pois]);
 
   const handleToggleShopping = (shoppingId: string) => {
     const newSelection = selectedShopping.includes(shoppingId)
       ? selectedShopping.filter(id => id !== shoppingId)
       : [...selectedShopping, shoppingId];
-    
+
     setSelectedShopping(newSelection);
     onSelectionChange(newSelection);
   };
@@ -203,7 +96,7 @@ export function ShoppingSection({ planningData, onSelectionChange, isTransitioni
         >
           <ShoppingBag className="w-8 h-8 text-pink-400" />
         </motion.div>
-        
+
         <h2 className="text-3xl text-white mb-4">
           Shop & Explore Markets
         </h2>
@@ -230,11 +123,10 @@ export function ShoppingSection({ planningData, onSelectionChange, isTransitioni
               onHoverEnd={() => setHoveredShopping(null)}
               className="group"
             >
-              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${
-                isSelected 
-                  ? 'ring-2 ring-pink-400 bg-pink-500/10' 
-                  : 'bg-black/20 hover:bg-black/30'
-              } backdrop-blur-sm border-white/10`}>
+              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${isSelected
+                ? 'ring-2 ring-pink-400 bg-pink-500/10'
+                : 'bg-black/20 hover:bg-black/30'
+                } backdrop-blur-sm border-white/10`}>
                 <div className="relative">
                   {/* Image */}
                   <div className="aspect-video overflow-hidden">
@@ -318,7 +210,7 @@ export function ShoppingSection({ planningData, onSelectionChange, isTransitioni
 
                   {/* Specialties */}
                   <div className="flex flex-wrap gap-1 mb-4">
-                    {shopping.specialties.slice(0, 3).map((specialty) => (
+                    {shopping.specialties.slice(0, 3).map((specialty: string) => (
                       <Badge key={specialty} variant="secondary" className="text-xs bg-white/10 text-white/70">
                         {specialty}
                       </Badge>
@@ -336,8 +228,8 @@ export function ShoppingSection({ planningData, onSelectionChange, isTransitioni
                       size="sm"
                       variant={isSelected ? "default" : "outline"}
                       onClick={() => handleToggleShopping(shopping.id)}
-                      className={isSelected 
-                        ? "bg-pink-600 hover:bg-pink-700 text-white" 
+                      className={isSelected
+                        ? "bg-pink-600 hover:bg-pink-700 text-white"
                         : "border-white/20 text-white hover:bg-white/10"
                       }
                     >

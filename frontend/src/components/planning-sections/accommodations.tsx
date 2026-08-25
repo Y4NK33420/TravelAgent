@@ -4,21 +4,9 @@ import { Star, MapPin, Wifi, Car, Coffee, Waves, Heart, Plus, Users, Bed } from 
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
+import { mapPOIToAccommodation, Accommodation, getRandomDescription } from '../../utils/poi-mapper';
 
-interface Accommodation {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  suggested: number; // 1-100
-  price: string;
-  rating: number;
-  amenities: string[];
-  location: string;
-  type: 'hotel' | 'hostel' | 'airbnb' | 'resort' | 'boutique';
-  rooms: string;
-  guests: number;
-}
+
 
 interface AccommodationsSectionProps {
   planningData: any;
@@ -56,62 +44,7 @@ const mockAccommodations: Accommodation[] = [
     rooms: 'Heritage Suite',
     guests: 4
   },
-  {
-    id: '3',
-    name: 'The Imperial New Delhi',
-    description: 'Colonial-era luxury hotel in the heart of Delhi',
-    image: 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800&h=600&fit=crop',
-    suggested: 89,
-    price: '₹12000-18000/night',
-    rating: 4.6,
-    amenities: ['Wi-Fi', 'Restaurant', 'Gym', 'Pool', 'Business Center'],
-    location: 'Connaught Place, New Delhi',
-    type: 'hotel',
-    rooms: 'Deluxe Room',
-    guests: 2
-  },
-  {
-    id: '4',
-    name: 'Zostel Jaipur',
-    description: 'Budget-friendly hostel with vibrant social atmosphere',
-    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&h=600&fit=crop',
-    suggested: 78,
-    price: '₹600-1200/night',
-    rating: 4.2,
-    amenities: ['Wi-Fi', 'Shared Kitchen', 'Common Room', 'Laundry'],
-    location: 'Pink City, Jaipur',
-    type: 'hostel',
-    rooms: 'Shared Dormitory',
-    guests: 1
-  },
-  {
-    id: '5',
-    name: 'Taj Lake Palace, Udaipur',
-    description: 'Iconic palace hotel floating on Lake Pichola',
-    image: 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=800&h=600&fit=crop',
-    suggested: 85,
-    price: '₹45000-80000/night',
-    rating: 4.9,
-    amenities: ['Wi-Fi', 'Spa', 'Fine Dining', 'Butler Service', 'Boat Transfer'],
-    location: 'Lake Pichola, Udaipur',
-    type: 'hotel',
-    rooms: 'Palace Suite',
-    guests: 2
-  },
-  {
-    id: '6',
-    name: 'Kerala Houseboat',
-    description: 'Traditional houseboat experience on the backwaters',
-    image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&h=600&fit=crop',
-    suggested: 81,
-    price: '₹8000-15000/night',
-    rating: 4.4,
-    amenities: ['Wi-Fi', 'Kitchenette', 'Scenic Views', 'Private Deck'],
-    location: 'Alleppey, Kerala',
-    type: 'airbnb',
-    rooms: 'Houseboat',
-    guests: 2
-  }
+  // ... (keep one or two mocks as fallback)
 ];
 
 const amenityIcons: { [key: string]: any } = {
@@ -127,6 +60,24 @@ const amenityIcons: { [key: string]: any } = {
   'Balcony': Waves
 };
 
+// Helper to map backend hotel data to frontend Accommodation
+const mapBackendHotelToAccommodation = (hotel: any): Accommodation => {
+  return {
+    id: hotel.hotel_id || hotel.id || hotel.provider_id,
+    name: hotel.name,
+    description: hotel.description?.text || hotel.description || getRandomDescription('accommodation'),
+    image: hotel.photo_url || hotel.image_url || 'https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=800&h=600&fit=crop', // Placeholder
+    suggested: hotel.ai_score ? Math.round(hotel.ai_score) : 95,
+    price: hotel.total_price ? `₹${Math.round(hotel.total_price * 83)}` : 'Check Price', // Convert USD to INR approx
+    rating: typeof hotel.rating === 'string' ? parseFloat(hotel.rating) : (hotel.rating || 4.5),
+    amenities: hotel.amenities || ['Wi-Fi', 'AC', 'Restaurant', 'Concierge'],
+    location: hotel.address?.cityName || 'City Center',
+    type: 'hotel',
+    rooms: 'Standard Room',
+    guests: 2
+  };
+};
+
 export function AccommodationsSection({ planningData, onSelectionChange, isTransitioning }: AccommodationsSectionProps) {
   // Determine how many suggestions to highlight based on trip style
   const getTopSuggestionCount = (tripStyle: string) => {
@@ -137,26 +88,47 @@ export function AccommodationsSection({ planningData, onSelectionChange, isTrans
     }
   };
 
+  // 1. Try to use recommended hotels from Phase 2 backend
+  let realAccommodations: Accommodation[] = [];
+
+  if (planningData?.hotels && planningData.hotels.length > 0) {
+    realAccommodations = planningData.hotels.map(mapBackendHotelToAccommodation);
+  }
+  else if (planningData?.recommended_hotels && planningData.recommended_hotels.length > 0) {
+    realAccommodations = planningData.recommended_hotels.map(mapBackendHotelToAccommodation);
+  }
+  // 2. Fallback to mapping generic POIs
+  else if (planningData?.pois) {
+    realAccommodations = planningData.pois
+      .filter((p: any) => p.category?.some((c: string) =>
+        ['lodging', 'hotel', 'resort', 'hostel', 'guest house'].some(k => c.toLowerCase().includes(k))
+      ))
+      .map(mapPOIToAccommodation);
+  }
+
+  // Use real accommodations if available, otherwise fallback to mock
+  const accommodationsToDisplay = (realAccommodations.length > 0 ? realAccommodations : mockAccommodations)
+    .filter(a => a.id); // Filter out items with missing IDs
+
   const topSuggestionCount = getTopSuggestionCount(planningData.tripStyle);
-  const sortedAccommodations = [...mockAccommodations].sort((a, b) => b.suggested - a.suggested);
-  
-  // Pre-select top AI suggestions by default
-  const defaultSelections = sortedAccommodations.slice(0, topSuggestionCount).map(a => a.id);
-  const [selectedAccommodations, setSelectedAccommodations] = useState<string[]>(defaultSelections);
+  const sortedAccommodations = [...accommodationsToDisplay].sort((a, b) => b.suggested - a.suggested);
+
+  // Start with no selections to let user choose
+  const [selectedAccommodations, setSelectedAccommodations] = useState<string[]>([]);
   const [hoveredAccommodation, setHoveredAccommodation] = useState<string | null>(null);
 
   // Initialize with default selections
   useEffect(() => {
-    const newDefaultSelections = sortedAccommodations.slice(0, topSuggestionCount).map(a => a.id);
-    setSelectedAccommodations(newDefaultSelections);
-    onSelectionChange(newDefaultSelections);
-  }, [planningData?.tripStyle]);
+    // We don't auto-select anymore to give user control
+    setSelectedAccommodations([]);
+    onSelectionChange([]);
+  }, [planningData?.tripStyle, planningData?.pois, planningData?.recommended_hotels]);
 
   const handleToggleAccommodation = (accommodationId: string) => {
     const newSelection = selectedAccommodations.includes(accommodationId)
       ? selectedAccommodations.filter(id => id !== accommodationId)
       : [...selectedAccommodations, accommodationId];
-    
+
     setSelectedAccommodations(newSelection);
     onSelectionChange(newSelection);
   };
@@ -188,12 +160,12 @@ export function AccommodationsSection({ planningData, onSelectionChange, isTrans
         >
           <Bed className="w-8 h-8 text-purple-400" />
         </motion.div>
-        
+
         <h2 className="text-3xl text-white mb-4">
           Find Your Perfect Stay
         </h2>
         <p className="text-white/70 text-lg max-w-2xl mx-auto">
-          Choose accommodations that match your style and budget. 
+          Choose accommodations that match your style and budget.
           From luxury hotels to cozy apartments, we've curated the best options.
         </p>
       </motion.div>
@@ -207,7 +179,7 @@ export function AccommodationsSection({ planningData, onSelectionChange, isTrans
 
           return (
             <motion.div
-              key={accommodation.id}
+              key={accommodation.id || `acc-${index}`}
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: index * 0.1, ease: "easeOut" }}
@@ -215,11 +187,10 @@ export function AccommodationsSection({ planningData, onSelectionChange, isTrans
               onHoverEnd={() => setHoveredAccommodation(null)}
               className="group"
             >
-              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${
-                isSelected 
-                  ? 'ring-2 ring-purple-400 bg-purple-500/10' 
-                  : 'bg-black/20 hover:bg-black/30'
-              } backdrop-blur-sm border-white/10`}>
+              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${isSelected
+                ? 'ring-2 ring-purple-400 bg-purple-500/10'
+                : 'bg-black/20 hover:bg-black/30'
+                } backdrop-blur-sm border-white/10`}>
                 <div className="relative">
                   {/* Image */}
                   <div className="aspect-video overflow-hidden">
@@ -321,8 +292,8 @@ export function AccommodationsSection({ planningData, onSelectionChange, isTrans
                       size="sm"
                       variant={isSelected ? "default" : "outline"}
                       onClick={() => handleToggleAccommodation(accommodation.id)}
-                      className={isSelected 
-                        ? "bg-purple-600 hover:bg-purple-700 text-white" 
+                      className={isSelected
+                        ? "bg-purple-600 hover:bg-purple-700 text-white"
                         : "border-white/20 text-white hover:bg-white/10"
                       }
                     >

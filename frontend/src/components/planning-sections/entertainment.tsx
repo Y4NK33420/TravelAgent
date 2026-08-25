@@ -4,147 +4,13 @@ import { Star, MapPin, Clock, Music, Heart, Plus, Calendar, Users } from 'lucide
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-
-interface Entertainment {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  suggested: number; // 1-100
-  price: string;
-  rating: number;
-  location: string;
-  type: 'theater' | 'concert' | 'cabaret' | 'nightclub' | 'bar' | 'cultural';
-  schedule: string;
-  atmosphere: string;
-  features: string[];
-  dressCode?: string;
-}
+import { mapPOIToEntertainment, Entertainment } from '../../utils/poi-mapper';
 
 interface EntertainmentSectionProps {
   planningData: any;
   onSelectionChange: (data: any) => void;
   isTransitioning: boolean;
 }
-
-// Mock data - in real app this would come from API
-const mockEntertainment: Entertainment[] = [
-  {
-    id: '1',
-    name: 'Kingdom of Dreams',
-    description: 'Spectacular live entertainment with Bollywood-style musicals',
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&h=600&fit=crop',
-    suggested: 98,
-    price: '₹1500-3000',
-    rating: 4.6,
-    location: 'Gurgaon, Delhi NCR',
-    type: 'theater',
-    schedule: 'Shows: 7pm & 9pm',
-    atmosphere: 'Glamorous and vibrant',
-    features: ['Bollywood Musicals', 'Cultural Shows', 'Dinner Options', 'Grand Theater'],
-    dressCode: 'Smart casual'
-  },
-  {
-    id: '2',
-    name: 'NCPA Mumbai',
-    description: 'Premier performing arts center with classical and contemporary shows',
-    image: 'https://images.unsplash.com/photo-1465844788393-2fc2d0ad4c3c?w=800&h=600&fit=crop',
-    suggested: 92,
-    price: '₹500-2500',
-    rating: 4.8,
-    location: 'Nariman Point, Mumbai',
-    type: 'theater',
-    schedule: 'Various show times',
-    atmosphere: 'Elegant and cultural',
-    features: ['Classical Music', 'Dance', 'Theater', 'Art Exhibitions'],
-    dressCode: 'Formal attire recommended'
-  },
-  {
-    id: '3',
-    name: 'Blue Frog Mumbai',
-    description: 'Live music venue featuring indie and international artists',
-    image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800&h=600&fit=crop',
-    suggested: 89,
-    price: '₹800-1500',
-    rating: 4.4,
-    location: 'Lower Parel, Mumbai',
-    type: 'concert',
-    schedule: '8pm - 1am',
-    atmosphere: 'Intimate and energetic',
-    features: ['Live Music', 'Craft Beer', 'International Acts', 'Great Acoustics']
-  },
-  {
-    id: '4',
-    name: 'Kathakali Performance',
-    description: 'Traditional Kerala dance-drama with elaborate costumes',
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&h=600&fit=crop',
-    suggested: 87,
-    price: '₹300-800',
-    rating: 4.5,
-    location: 'Fort Kochi, Kerala',
-    type: 'cultural',
-    schedule: 'Shows: 6pm & 8pm',
-    atmosphere: 'Traditional and mystical',
-    features: ['Classical Dance', 'Traditional Music', 'Cultural Experience', 'Authentic Costumes'],
-    dressCode: 'Casual'
-  },
-  {
-    id: '5',
-    name: 'Aer at Four Seasons Mumbai',
-    description: 'Rooftop bar with stunning city views and craft cocktails',
-    image: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&h=600&fit=crop',
-    suggested: 84,
-    price: '₹1000-2000/cocktail',
-    rating: 4.7,
-    location: 'Worli, Mumbai',
-    type: 'bar',
-    schedule: '6pm - 1:30am',
-    atmosphere: 'Sophisticated and luxurious',
-    features: ['Rooftop Views', 'Craft Cocktails', 'Live DJ', 'Skyline Views']
-  },
-  {
-    id: '6',
-    name: 'Kitty Su Delhi',
-    description: 'Premier nightclub with international DJs and vibrant atmosphere',
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&h=600&fit=crop',
-    suggested: 79,
-    price: '₹2000-3000',
-    rating: 4.3,
-    location: 'Aerocity, New Delhi',
-    type: 'nightclub',
-    schedule: '10pm - 3am',
-    atmosphere: 'Upscale and energetic',
-    features: ['International DJs', 'Premium Sound', 'VIP Areas', 'Late Night']
-  },
-  {
-    id: '7',
-    name: 'Comédie-Française',
-    description: 'France\'s national theater with classical and contemporary plays',
-    image: 'https://images.unsplash.com/photo-1465844788393-2fc2d0ad4c3c?w=800&h=600&fit=crop',
-    suggested: 82,
-    price: '€25-65',
-    rating: 4.6,
-    location: 'Palais-Royal, 1st arrondissement',
-    type: 'theater',
-    schedule: 'Various show times',
-    atmosphere: 'Traditional and prestigious',
-    features: ['French Theater', 'Classic Plays', 'Historic Venue', 'Cultural Heritage']
-  },
-  {
-    id: '8',
-    name: 'Harry\'s Bar',
-    description: 'Historic American bar famous for inventing the Bloody Mary',
-    image: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=800&h=600&fit=crop',
-    suggested: 76,
-    price: '€12-20/drink',
-    rating: 4.2,
-    location: 'Opéra, 2nd arrondissement',
-    type: 'bar',
-    schedule: '10:30am - 4am',
-    atmosphere: 'Casual and historic',
-    features: ['Classic Cocktails', 'American Atmosphere', 'Live Piano', 'Historic Bar']
-  }
-];
 
 export function EntertainmentSection({ planningData, onSelectionChange, isTransitioning }: EntertainmentSectionProps) {
   const getTopSuggestionCount = (tripStyle: string) => {
@@ -155,10 +21,19 @@ export function EntertainmentSection({ planningData, onSelectionChange, isTransi
     }
   };
 
-  const topSuggestionCount = getTopSuggestionCount(planningData.tripStyle);
-  const sortedEntertainment = [...mockEntertainment].sort((a, b) => b.suggested - a.suggested);
-  
-  // Pre-select top AI suggestions by default
+  // Filter and map real POIs to entertainment
+  const realEntertainment = planningData?.pois
+    ?.filter((p: any) => p.category?.some((c: string) =>
+      ['night_club', 'bar', 'casino', 'movie_theater', 'art_gallery', 'museum', 'club', 'pub', 'theater', 'concert'].some(k => c.toLowerCase().includes(k))
+    ))
+    .map(mapPOIToEntertainment) || [];
+
+  // Use real entertainment if available, otherwise empty
+  const entertainmentToDisplay = realEntertainment.length > 0 ? realEntertainment : [];
+
+  const topSuggestionCount = getTopSuggestionCount(planningData?.tripStyle || 'balanced');
+  const sortedEntertainment = [...entertainmentToDisplay].sort((a, b) => b.suggested - a.suggested);
+
   const defaultSelections = sortedEntertainment.slice(0, topSuggestionCount).map(e => e.id);
   const [selectedEntertainment, setSelectedEntertainment] = useState<string[]>(defaultSelections);
   const [hoveredEntertainment, setHoveredEntertainment] = useState<string | null>(null);
@@ -168,13 +43,13 @@ export function EntertainmentSection({ planningData, onSelectionChange, isTransi
     const newDefaultSelections = sortedEntertainment.slice(0, topSuggestionCount).map(e => e.id);
     setSelectedEntertainment(newDefaultSelections);
     onSelectionChange(newDefaultSelections);
-  }, [planningData?.tripStyle]);
+  }, [planningData?.tripStyle, planningData?.pois]);
 
   const handleToggleEntertainment = (entertainmentId: string) => {
     const newSelection = selectedEntertainment.includes(entertainmentId)
       ? selectedEntertainment.filter(id => id !== entertainmentId)
       : [...selectedEntertainment, entertainmentId];
-    
+
     setSelectedEntertainment(newSelection);
     onSelectionChange(newSelection);
   };
@@ -207,7 +82,7 @@ export function EntertainmentSection({ planningData, onSelectionChange, isTransi
         >
           <Music className="w-8 h-8 text-indigo-400" />
         </motion.div>
-        
+
         <h2 className="text-3xl text-white mb-4">
           Entertainment & Nightlife
         </h2>
@@ -218,161 +93,168 @@ export function EntertainmentSection({ planningData, onSelectionChange, isTransi
       </motion.div>
 
       {/* Entertainment grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedEntertainment.map((entertainment, index) => {
-          const isSelected = selectedEntertainment.includes(entertainment.id);
-          const isTopSuggestion = index < topSuggestionCount;
-          const isHovered = hoveredEntertainment === entertainment.id;
+      {sortedEntertainment.length === 0 ? (
+        <div className="text-center py-12 bg-white/5 rounded-xl backdrop-blur-sm border border-white/10">
+          <Music className="w-12 h-12 text-white/20 mx-auto mb-4" />
+          <h3 className="text-xl text-white mb-2">No entertainment found</h3>
+          <p className="text-white/60">We couldn't find any specific entertainment options for this destination.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {sortedEntertainment.map((entertainment, index) => {
+            const isSelected = selectedEntertainment.includes(entertainment.id);
+            const isTopSuggestion = index < topSuggestionCount;
+            const isHovered = hoveredEntertainment === entertainment.id;
 
-          return (
-            <motion.div
-              key={entertainment.id}
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.1, ease: "easeOut" }}
-              onHoverStart={() => setHoveredEntertainment(entertainment.id)}
-              onHoverEnd={() => setHoveredEntertainment(null)}
-              className="group"
-            >
-              <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${
-                isSelected 
-                  ? 'ring-2 ring-indigo-400 bg-indigo-500/10' 
+            return (
+              <motion.div
+                key={entertainment.id}
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: index * 0.1, ease: "easeOut" }}
+                onHoverStart={() => setHoveredEntertainment(entertainment.id)}
+                onHoverEnd={() => setHoveredEntertainment(null)}
+                className="group"
+              >
+                <Card className={`overflow-hidden cursor-pointer transition-all duration-300 ${isSelected
+                  ? 'ring-2 ring-indigo-400 bg-indigo-500/10'
                   : 'bg-black/20 hover:bg-black/30'
-              } backdrop-blur-sm border-white/10`}>
-                <div className="relative">
-                  {/* Image */}
-                  <div className="aspect-video overflow-hidden">
-                    <motion.img
-                      src={entertainment.image}
-                      alt={entertainment.name}
-                      className="w-full h-full object-cover"
-                      animate={{
-                        scale: isHovered ? 1.05 : 1
-                      }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
+                  } backdrop-blur-sm border-white/10`}>
+                  <div className="relative">
+                    {/* Image */}
+                    <div className="aspect-video overflow-hidden">
+                      <motion.img
+                        src={entertainment.image}
+                        alt={entertainment.name}
+                        className="w-full h-full object-cover"
+                        animate={{
+                          scale: isHovered ? 1.05 : 1
+                        }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
 
-                  {/* Suggested badge */}
-                  {isTopSuggestion && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.3 + index * 0.1 }}
-                      className="absolute top-3 left-3"
-                    >
-                      <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0">
-                        <Star className="w-3 h-3 mr-1" />
-                        AI Suggested
-                      </Badge>
-                    </motion.div>
-                  )}
-
-                  {/* Selection indicator */}
-                  <AnimatePresence>
-                    {isSelected && (
+                    {/* Suggested badge */}
+                    {isTopSuggestion && (
                       <motion.div
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        className="absolute top-3 right-3"
+                        transition={{ delay: 0.3 + index * 0.1 }}
+                        className="absolute top-3 left-3"
                       >
-                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center">
-                          <Heart className="w-4 h-4 text-white fill-current" />
-                        </div>
+                        <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0">
+                          <Star className="w-3 h-3 mr-1" />
+                          AI Suggested
+                        </Badge>
                       </motion.div>
                     )}
-                  </AnimatePresence>
 
-                  {/* Type badge */}
-                  <div className="absolute bottom-3 right-3">
-                    <Badge className={getTypeColor(entertainment.type)}>
-                      {entertainment.type}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-3">
-                    <h3 className="text-white text-lg leading-tight">{entertainment.name}</h3>
-                    <div className="flex items-center text-yellow-400 ml-2">
-                      <Star className="w-4 h-4 fill-current" />
-                      <span className="text-sm ml-1">{entertainment.rating}</span>
-                    </div>
-                  </div>
-
-                  <p className="text-white/70 text-sm mb-4 line-clamp-2">
-                    {entertainment.description}
-                  </p>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center text-white/60 text-sm">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      {entertainment.location}
-                    </div>
-                    <div className="flex items-center text-white/60 text-sm">
-                      <Clock className="w-4 h-4 mr-2" />
-                      {entertainment.schedule}
-                    </div>
-                    <div className="flex items-center text-white/60 text-sm">
-                      <Users className="w-4 h-4 mr-2" />
-                      {entertainment.atmosphere}
-                    </div>
-                  </div>
-
-                  {/* Features */}
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {entertainment.features.slice(0, 3).map((feature) => (
-                      <Badge key={feature} variant="secondary" className="text-xs bg-white/10 text-white/70">
-                        {feature}
-                      </Badge>
-                    ))}
-                    {entertainment.features.length > 3 && (
-                      <Badge variant="secondary" className="text-xs bg-white/10 text-white/70">
-                        +{entertainment.features.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Dress code if available */}
-                  {entertainment.dressCode && (
-                    <div className="mb-4">
-                      <Badge variant="outline" className="text-xs border-white/20 text-white/60">
-                        {entertainment.dressCode}
-                      </Badge>
-                    </div>
-                  )}
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-indigo-400">{entertainment.price}</span>
-                    <Button
-                      size="sm"
-                      variant={isSelected ? "default" : "outline"}
-                      onClick={() => handleToggleEntertainment(entertainment.id)}
-                      className={isSelected 
-                        ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
-                        : "border-white/20 text-white hover:bg-white/10"
-                      }
-                    >
-                      {isSelected ? (
-                        <>
-                          <Heart className="w-4 h-4 mr-1 fill-current" />
-                          Added
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add
-                        </>
+                    {/* Selection indicator */}
+                    <AnimatePresence>
+                      {isSelected && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="absolute top-3 right-3"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center">
+                            <Heart className="w-4 h-4 text-white fill-current" />
+                          </div>
+                        </motion.div>
                       )}
-                    </Button>
+                    </AnimatePresence>
+
+                    {/* Type badge */}
+                    <div className="absolute bottom-3 right-3">
+                      <Badge className={getTypeColor(entertainment.type)}>
+                        {entertainment.type}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </div>
+
+                  <div className="p-5">
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="text-white text-lg leading-tight">{entertainment.name}</h3>
+                      <div className="flex items-center text-yellow-400 ml-2">
+                        <Star className="w-4 h-4 fill-current" />
+                        <span className="text-sm ml-1">{entertainment.rating}</span>
+                      </div>
+                    </div>
+
+                    <p className="text-white/70 text-sm mb-4 line-clamp-2">
+                      {entertainment.description}
+                    </p>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center text-white/60 text-sm">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        {entertainment.location}
+                      </div>
+                      <div className="flex items-center text-white/60 text-sm">
+                        <Clock className="w-4 h-4 mr-2" />
+                        {entertainment.schedule}
+                      </div>
+                      <div className="flex items-center text-white/60 text-sm">
+                        <Users className="w-4 h-4 mr-2" />
+                        {entertainment.atmosphere}
+                      </div>
+                    </div>
+
+                    {/* Features */}
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {entertainment.features.slice(0, 3).map((feature: string) => (
+                        <Badge key={feature} variant="secondary" className="text-xs bg-white/10 text-white/70">
+                          {feature}
+                        </Badge>
+                      ))}
+                      {entertainment.features.length > 3 && (
+                        <Badge variant="secondary" className="text-xs bg-white/10 text-white/70">
+                          +{entertainment.features.length - 3} more
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Dress code if available */}
+                    {entertainment.dressCode && (
+                      <div className="mb-4">
+                        <Badge variant="outline" className="text-xs border-white/20 text-white/60">
+                          {entertainment.dressCode}
+                        </Badge>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-indigo-400">{entertainment.price}</span>
+                      <Button
+                        size="sm"
+                        variant={isSelected ? "default" : "outline"}
+                        onClick={() => handleToggleEntertainment(entertainment.id)}
+                        className={isSelected
+                          ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                          : "border-white/20 text-white hover:bg-white/10"
+                        }
+                      >
+                        {isSelected ? (
+                          <>
+                            <Heart className="w-4 h-4 mr-1 fill-current" />
+                            Added
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Selection summary */}
       <AnimatePresence>
