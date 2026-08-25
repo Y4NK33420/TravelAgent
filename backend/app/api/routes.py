@@ -2,7 +2,7 @@
 import logging
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from langchain_core.messages import HumanMessage
 
 from app.models.schemas import (
@@ -19,6 +19,11 @@ from app.agents.graph import get_travel_agent_graph
 from app.services.google_maps import get_google_maps_service
 from app.services.gemini import get_gemini_service
 
+from app.api.deps import get_current_user
+from app.db import get_session_context
+from app.services.database import DatabaseService
+from app.services.state_persistence import StatePersistenceService
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["trips"])
@@ -29,7 +34,10 @@ trips_store = {}
 
 
 @router.post("/trips", response_model=TripCreateResponse, responses={500: {"model": ErrorResponse}})
-async def create_trip(request: TripCreateRequest):
+async def create_trip(
+    request: TripCreateRequest,
+    user_id: str = Depends(get_current_user)
+):
     """
     Create a new trip from natural language input.
     
@@ -37,7 +45,7 @@ async def create_trip(request: TripCreateRequest):
     and discovers relevant POIs using the LangGraph workflow.
     
     - **user_message**: Natural language description of the trip
-    - **user_id**: Optional user identifier for personalization (Phase 2)
+    - **user_id**: Authenticated user ID
     
     Returns the trip ID, extracted constraints, and number of POIs found.
     """
@@ -61,7 +69,7 @@ async def create_trip(request: TripCreateRequest):
         
         # Run the graph
         logger.info(f"Running graph for trip {trip_id}...")
-        result = graph.invoke(initial_state)
+        result = await graph.ainvoke(initial_state)
         
         # Check for errors
         error_message = result.get('error_message')
@@ -73,9 +81,33 @@ async def create_trip(request: TripCreateRequest):
         constraints = result.get('constraints', {})
         potential_pois = result.get('potential_pois', [])
         
-        # Store the result
+        # Store the result in memory (legacy)
         result['updated_at'] = datetime.utcnow().isoformat()
         trips_store[trip_id] = result
+        
+        # Persist to Database (Phase 2)
+        try:
+            async with get_session_context() as session:
+                db = DatabaseService(session)
+                persistence = StatePersistenceService(session)
+                
+                # Create trip record
+                await db.create_trip(
+                    user_id=user_id,
+                    trip_id=trip_id,
+                    destination=constraints.get('destination', 'Unknown'),
+                    constraints=constraints,
+                    destination_lat=result.get('destination_coords', {}).get('lat'),
+                    destination_lng=result.get('destination_coords', {}).get('lng')
+                )
+                
+                # Save full state (including POIs, hotels, flights)
+                await persistence.save_trip_state(trip_id, result)
+                logger.info(f"✅ Persisted trip {trip_id} to database")
+                
+        except Exception as e:
+            logger.error(f"Failed to persist trip to database: {e}")
+            # Continue even if persistence fails, as we have in-memory fallback
         
         logger.info(f"Trip {trip_id} created successfully with {len(potential_pois)} POIs")
         
@@ -250,7 +282,7 @@ async def health_check():
     # Check Google Maps
     try:
         maps_service = get_google_maps_service()
-        test_result = maps_service.geocode("Paris, France")
+        test_result = await maps_service.geocode("Paris, France")
         services_status["google_maps"] = "healthy" if test_result else "degraded"
     except Exception as e:
         logger.error(f"Google Maps health check failed: {e}")
@@ -259,7 +291,7 @@ async def health_check():
     # Check Gemini
     try:
         gemini_service = get_gemini_service()
-        test_response = gemini_service.generate("Hello", max_output_tokens=10)
+        test_response = gemini_service.generate("Hello", max_output_tokens=50)
         services_status["gemini"] = "healthy" if test_response else "degraded"
     except Exception as e:
         logger.error(f"Gemini health check failed: {e}")

@@ -70,9 +70,18 @@ class StatePersistenceService:
                 logger.error(f"Trip {trip_id} not found")
                 return False
             
-            # Save constraints
-            if state.get('constraints'):
-                trip.constraints = state['constraints']
+            # Save constraints and Phase 2 data (hotels, flights, transport)
+            constraints_data = state.get('constraints', {}).copy()
+            
+            # Inject Phase 2 data into constraints for persistence
+            if state.get('recommended_hotels'):
+                constraints_data['recommended_hotels'] = state['recommended_hotels']
+            if state.get('recommended_flights'):
+                constraints_data['recommended_flights'] = state['recommended_flights']
+            if state.get('local_transport'):
+                constraints_data['local_transport'] = state['local_transport']
+                
+            trip.constraints = constraints_data
             
             # Save destination coordinates
             if state.get('destination_coords'):
@@ -203,6 +212,23 @@ class StatePersistenceService:
                 'updated_at': trip.updated_at.isoformat()
             }
             
+            # Extract Phase 2 data from constraints if present
+            constraints = trip.constraints or {}
+            if 'recommended_hotels' in constraints:
+                state['recommended_hotels'] = constraints['recommended_hotels']
+            else:
+                state['recommended_hotels'] = []
+                
+            if 'recommended_flights' in constraints:
+                state['recommended_flights'] = constraints['recommended_flights']
+            else:
+                state['recommended_flights'] = []
+                
+            if 'local_transport' in constraints:
+                state['local_transport'] = constraints['local_transport']
+            else:
+                state['local_transport'] = None
+            
             # Restore destination coords
             if trip.destination_lat and trip.destination_lng:
                 state['destination_coords'] = {
@@ -332,6 +358,11 @@ async def get_state_persistence_service(
 ) -> StatePersistenceService:
     """Get a StatePersistenceService instance."""
     return StatePersistenceService(session=session)
+
+
+
+
+
 
 
 

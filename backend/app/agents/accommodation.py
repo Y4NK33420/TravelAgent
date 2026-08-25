@@ -19,7 +19,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.models.state import TravelAgentState
 from app.config import settings
-from app.services.providers.accommodation.amadeus import get_amadeus_hotel_provider
+from app.services.providers.accommodation.google_places import GooglePlacesHotelProvider
 from app.services.providers.transport.google_routes import get_google_routes_provider
 from app.services.providers.base import Hotel
 
@@ -39,10 +39,10 @@ class AccommodationAgent:
     
     def __init__(self):
         """Initialize the accommodation agent."""
-        self.hotel_provider = get_amadeus_hotel_provider()
+        self.hotel_provider = GooglePlacesHotelProvider()
         self.route_provider = get_google_routes_provider()
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             google_api_key=settings.gemini_api_key,
             temperature=0.7
         )
@@ -55,7 +55,9 @@ class AccommodationAgent:
         checkout_date: date,
         num_guests: int,
         budget_preference: str,
-        max_results: int = 20
+        max_results: int = 20,
+        location_coords: Optional[dict] = None,
+        radius_km: int = 10
     ) -> List[Hotel]:
         """Search for hotels matching criteria.
         
@@ -66,6 +68,7 @@ class AccommodationAgent:
             num_guests: Number of guests
             budget_preference: "budget", "moderate", or "luxury"
             max_results: Maximum number of results
+            location_coords: Optional {"lat": float, "lng": float}
         
         Returns:
             List of Hotel objects
@@ -79,14 +82,16 @@ class AccommodationAgent:
             'luxury': {'max_results': max_results, 'ratings': ['4', '5'], 'currency': 'USD'}
         }
         
-        filters = budget_filters.get(budget_preference.lower(), budget_filters['moderate'])
+        filters = budget_filters.get(budget_preference.lower(), budget_filters['moderate']).copy()
+        filters['radius'] = radius_km
         
         hotels = await self.hotel_provider.search(
             destination=destination,
             checkin_date=checkin_date,
             checkout_date=checkout_date,
             num_guests=num_guests,
-            filters=filters
+            filters=filters,
+            location_coords=location_coords
         )
         
         logger.info(f"Found {len(hotels)} hotels")
@@ -364,12 +369,16 @@ async def accommodation_agent_node(state: TravelAgentState) -> Dict[str, Any]:
         num_days = constraints.get('num_days', 3)
         num_guests = constraints.get('num_travelers', 1)
         pois = state.get('potential_pois') or []
+        destination_coords = state.get('destination_coords')  # Extract coords
         
         # Calculate dates (default: 2 weeks from now)
         checkin = date.today() + timedelta(days=14)
         checkout = checkin + timedelta(days=num_days)
         
         logger.info(f"Searching hotels for {destination}")
+        if destination_coords:
+            logger.info(f"Using coordinates: {destination_coords}")
+            
         logger.info(f"Dates: {checkin} to {checkout} ({num_days} nights)")
         logger.info(f"Guests: {num_guests}, Budget: {budget}")
         
@@ -380,14 +389,55 @@ async def accommodation_agent_node(state: TravelAgentState) -> Dict[str, Any]:
             checkout_date=checkout,
             num_guests=num_guests,
             budget_preference=budget,
-            max_results=20
+            max_results=20,
+            location_coords=destination_coords  # Pass coords
         )
         
+        if not hotels:
+            logger.info("No hotels found with default radius. Retrying with 50km radius at destination.")
+            hotels = await agent.search_hotels(
+                destination=destination,
+                checkin_date=checkin,
+                checkout_date=checkout,
+                num_guests=num_guests,
+                budget_preference=budget,
+                max_results=20,
+                location_coords=destination_coords,
+                radius_km=50
+            )
+
+        if not hotels and pois:
+            logger.info("No hotels found at destination. Attempting fallback search near top POI.")
+            # Try to find a POI with coordinates
+            fallback_coords = None
+            fallback_poi_name = "Top POI"
+            
+            for poi in pois:
+                if 'lat' in poi and 'lng' in poi:
+                    fallback_coords = {'lat': poi['lat'], 'lng': poi['lng']}
+                    fallback_poi_name = poi.get('name', 'Top POI')
+                    break
+            
+            if fallback_coords:
+                logger.info(f"Fallback search near {fallback_poi_name} ({fallback_coords}) with 50km radius")
+                hotels = await agent.search_hotels(
+                    destination=destination,
+                    checkin_date=checkin,
+                    checkout_date=checkout,
+                    num_guests=num_guests,
+                    budget_preference=budget,
+                    max_results=20,
+                    location_coords=fallback_coords,
+                    radius_km=50
+                )
+
+
         if not hotels:
             logger.warning("No hotels found")
             return {
                 "messages": [f"⚠️ No hotels found in {destination}. Try different dates or location."],
-                "recommended_hotels": []
+                "recommended_hotels": [],
+                "current_stage": "accommodation_complete"
             }
         
         logger.info(f"Found {len(hotels)} hotels, scoring them...")
@@ -458,6 +508,7 @@ async def accommodation_agent_node(state: TravelAgentState) -> Dict[str, Any]:
         traceback.print_exc()
         return {
             "messages": [f"❌ Error finding hotels: {str(e)}"],
-            "errors": [f"accommodation_agent: {str(e)}"]
+            "errors": [f"accommodation_agent: {str(e)}"],
+            "current_stage": "accommodation_complete"
         }
 

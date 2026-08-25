@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy import select, update, delete, and_, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,11 +102,12 @@ class DatabaseService:
         destination: str,
         constraints: Optional[Dict] = None,
         destination_lat: Optional[float] = None,
-        destination_lng: Optional[float] = None
+        destination_lng: Optional[float] = None,
+        trip_id: Optional[str] = None
     ) -> Trip:
         """Create a new trip."""
         trip = Trip(
-            id=str(uuid.uuid4()),
+            id=trip_id or str(uuid.uuid4()),
             user_id=user_id,
             destination=destination,
             destination_lat=destination_lat,
@@ -231,26 +233,41 @@ class DatabaseService:
                 await self.session.flush()
             return poi
         
-        # Create new POI
-        poi = POI(
-            place_id=place_id,
-            name=name,
-            category=category,
-            formatted_address=formatted_address,
-            lat=lat,
-            lng=lng,
-            rating=rating,
-            user_ratings_total=user_ratings_total,
-            price_level=price_level,
-            details=details,
-            embedding=embedding,
-            cached_at=now,
-            cache_expires_at=cache_expires
-        )
-        self.session.add(poi)
-        await self.session.flush()
-        logger.info(f"Created POI: {name} ({place_id})")
-        return poi
+        # Create new POI with handling for concurrent inserts
+        try:
+            # Use a nested transaction (savepoint) to handle potential unique constraint violations
+            # without rolling back the entire transaction
+            async with self.session.begin_nested():
+                poi = POI(
+                    place_id=place_id,
+                    name=name,
+                    category=category,
+                    formatted_address=formatted_address,
+                    lat=lat,
+                    lng=lng,
+                    rating=rating,
+                    user_ratings_total=user_ratings_total,
+                    price_level=price_level,
+                    details=details,
+                    embedding=embedding,
+                    cached_at=now,
+                    cache_expires_at=cache_expires
+                )
+                self.session.add(poi)
+                await self.session.flush()
+                logger.info(f"Created POI: {name} ({place_id})")
+                return poi
+        except IntegrityError:
+            logger.info(f"POI {place_id} created concurrently, fetching existing.")
+            # It exists now (created by another transaction), so fetch it
+            result = await self.session.execute(
+                select(POI).where(POI.place_id == place_id)
+            )
+            poi = result.scalar_one_or_none()
+            if poi:
+                return poi
+            # If we still can't find it, re-raise the error
+            raise
     
     async def get_poi_by_place_id(self, place_id: str) -> Optional[POI]:
         """Get POI by Google Places ID."""

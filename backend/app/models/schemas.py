@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 # === Request Schemas ===
 
 class TripCreateRequest(BaseModel):
-    """Request to create a new trip from natural language."""
+    """Request to create a new trip from natural language (V1)."""
     user_message: str = Field(
         ..., 
         description="Natural language trip request from the user",
@@ -16,6 +16,23 @@ class TripCreateRequest(BaseModel):
         None,
         description="Optional user identifier for personalization"
     )
+
+
+class TripConstraintsV2(BaseModel):
+    """Structured constraints for V2 API."""
+    origin: Optional[str] = None
+    dates: Optional[dict] = None  # {start: str, end: str}
+    travelers: Optional[dict] = None  # {adults: int, children: int}
+    budget: Optional[str] = None
+    pace: Optional[str] = None
+    interests: Optional[str] = None  # Acts as prompt context
+    amenities: list[str] = []
+
+
+class TripCreateRequestV2(BaseModel):
+    """Request to create a new trip with structured data (V2)."""
+    destination: str
+    constraints: Optional[TripConstraintsV2] = None
 
 
 class TripUpdateRequest(BaseModel):
@@ -81,6 +98,16 @@ class TripCreateResponse(BaseModel):
     pois_found: int = Field(0, description="Number of POIs discovered")
 
 
+class TripResponse(BaseModel):
+    """Trip response for V2 API."""
+    trip_id: str
+    destination: str
+    status: str
+    current_stage: Optional[str]
+    created_at: str
+    updated_at: str
+
+
 class TripPOIsResponse(BaseModel):
     """Response with all discovered POIs for a trip."""
     trip_id: str
@@ -101,6 +128,20 @@ class HealthCheckResponse(BaseModel):
         },
         description="Status of external services"
     )
+
+
+class SemanticSearchRequest(BaseModel):
+    """Semantic POI search request."""
+    query: str
+    limit: int = 20
+    category: Optional[str] = None
+
+
+class SemanticSearchResponse(BaseModel):
+    """Semantic search response."""
+    results: list[dict]
+    total: int
+    query: str
 
 
 class ErrorResponse(BaseModel):

@@ -19,7 +19,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.models.state import TravelAgentState
 from app.config import settings
-from app.services.providers.transport.amadeus_flights import get_amadeus_flight_provider
+from app.services.search_api import get_search_api_service
 from app.services.providers.transport.google_routes import get_google_routes_provider
 from app.services.providers.base import Flight, Route
 
@@ -40,10 +40,10 @@ class TransportAgent:
     
     def __init__(self):
         """Initialize the transport agent."""
-        self.flight_provider = get_amadeus_flight_provider()
+        self.search_service = get_search_api_service()
         self.route_provider = get_google_routes_provider()
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             google_api_key=settings.gemini_api_key,
             temperature=0.7
         )
@@ -75,22 +75,166 @@ class TransportAgent:
         """
         logger.info(f"Searching flights: {origin} → {destination}")
         
-        # Map budget to filters
-        max_results = 20 if budget_preference == 'budget' else 15
+        try:
+            # Resolve city names to airport codes if needed
+            origin_code = await self._resolve_airport_code(origin)
+            dest_code = await self._resolve_airport_code(destination)
+            
+            logger.info(f"Resolved airports: {origin} -> {origin_code}, {destination} -> {dest_code}")
+            
+            # Use SearchApi to find flights
+            results = await self.search_service.search_flights(
+                origin_code, 
+                dest_code, 
+                str(departure_date),
+                str(return_date) if return_date else None
+            )
+            
+            flights = []
+            
+            # Check for structured Google Flights results first
+            if "best_flights" in results or "other_flights" in results:
+                flights.extend(self._parse_google_flights_results(results, origin, destination))
+            
+            # Fallback to organic results if no structured data found
+            elif "organic_results" in results:
+                for result in results["organic_results"][:5]:
+                    # Create a generic flight object from search result
+                    # This is a fallback since we might not get structured flight data from standard search
+                    title = result.get("title", "Flight Option")
+                    snippet = result.get("snippet", "")
+                    
+                    # Try to extract price from snippet (very basic heuristic)
+                    import re
+                    price_match = re.search(r'\$(\d+)', snippet)
+                    price = float(price_match.group(1)) if price_match else 500.0
+                    
+                    flights.append(Flight(
+                        provider="google_search",
+                        provider_id=f"gsearch_{hash(title)}", # Generate a pseudo ID
+                        airline=title,
+                        flight_number="N/A",
+                        departure_datetime=str(departure_date),
+                        arrival_datetime="N/A",
+                        duration_minutes=120, # Placeholder
+                        origin=origin,
+                        destination=destination,
+                        price=price,
+                        currency="USD",
+                        stops=0 if "nonstop" in snippet.lower() else 1
+                    ))
+            
+            logger.info(f"Found {len(flights)} flight options via SearchApi")
+            return flights
+            
+            logger.info(f"Found {len(flights)} flight options via SearchApi")
+            return flights
+            
+        except Exception as e:
+            logger.error(f"Error searching flights: {e}")
+            return []
+
+    async def _resolve_airport_code(self, location: str) -> str:
+        """Resolve a location string to an IATA airport code."""
+        # Check if it already looks like an IATA code (3 uppercase letters)
+        if len(location) == 3 and location.isupper():
+            return location
+            
+        # Common mappings for testing/fallback
+        common_codes = {
+            "london": "LHR", "london, uk": "LHR",
+            "paris": "CDG", "paris, france": "CDG",
+            "new york": "JFK", "nyc": "JFK",
+            "tokyo": "HND", "tokyo, japan": "HND",
+            "dubai": "DXB", "dubai, uae": "DXB",
+            "singapore": "SIN",
+            "hong kong": "HKG",
+            "los angeles": "LAX",
+            "san francisco": "SFO"
+        }
         
-        flights = await self.flight_provider.search(
-            origin=origin,
-            destination=destination,
-            departure_date=departure_date,
-            return_date=return_date,
-            num_passengers=num_passengers,
-            cabin_class=cabin_class,
-            filters={'max_results': max_results, 'currency': 'USD'}
-        )
-        
-        logger.info(f"Found {len(flights)} flight options")
-        return flights
+        lower_loc = location.lower().strip()
+        if lower_loc in common_codes:
+            return common_codes[lower_loc]
+            
+        # Use LLM to find code if not in common list
+        try:
+            response = await self.llm.ainvoke(
+                f"What is the main international airport IATA code for {location}? Respond with ONLY the 3-letter code."
+            )
+            code = response.content.strip().upper()
+            if len(code) == 3:
+                return code
+        except Exception as e:
+            logger.warning(f"Failed to resolve airport code via LLM: {e}")
+            
+        return location # Fallback to original string
     
+    def _parse_google_flights_results(self, results: Dict[str, Any], origin: str, destination: str) -> List[Flight]:
+        """Parse structured Google Flights results from SearchApi."""
+        flights = []
+        
+        # Combine best and other flights
+        all_options = results.get("best_flights", []) + results.get("other_flights", [])
+        
+        for option in all_options[:10]: # Limit to top 10
+            try:
+                # Extract core details
+                price = float(option.get("price", 0))
+                total_duration = option.get("total_duration", 0)
+                
+                # Get first segment for airline info
+                segments = option.get("flights", [])
+                if not segments:
+                    continue
+                    
+                first_segment = segments[0]
+                airline = first_segment.get("airline", "Unknown Airline")
+                flight_number = first_segment.get("flight_number", "N/A")
+                
+                # Determine stops
+                stops = len(segments) - 1
+                
+                # Get departure/arrival times
+                # Departure is from first segment
+                dep_airport = first_segment.get("departure_airport", {})
+                dep_time = f"{dep_airport.get('date')}T{dep_airport.get('time')}:00" if dep_airport.get('date') else "N/A"
+                
+                # Arrival is from last segment
+                last_segment = segments[-1]
+                arr_airport = last_segment.get("arrival_airport", {})
+                arr_time = f"{arr_airport.get('date')}T{arr_airport.get('time')}:00" if arr_airport.get('date') else "N/A"
+                
+                # CO2
+                co2_kg = None
+                if "carbon_emissions" in option:
+                    co2_kg = option["carbon_emissions"].get("this_flight", 0) / 1000 # Convert g to kg if needed? 
+                    # Wait, JSON says 55000. Usually that's grams. 55kg.
+                    # Let's assume grams based on value size (55000) vs typical kg (55).
+                    
+                # Create Flight object
+                flights.append(Flight(
+                    provider="google_flights",
+                    provider_id=f"gf_{hash(flight_number + dep_time)}",
+                    airline=airline,
+                    flight_number=flight_number,
+                    departure_datetime=dep_time,
+                    arrival_datetime=arr_time,
+                    duration_minutes=total_duration,
+                    origin=origin,
+                    destination=destination,
+                    price=price,
+                    currency="USD",
+                    stops=stops,
+                    cabin_class=first_segment.get("travel_class", "Economy").lower(),
+                    co2_emissions_kg=co2_kg
+                ))
+            except Exception as e:
+                logger.warning(f"Error parsing flight option: {e}")
+                continue
+                
+        return flights
+
     def calculate_flight_efficiency_score(self, flight: Flight) -> float:
         """Calculate time efficiency score for a flight (0-100).
         
@@ -340,11 +484,17 @@ class TransportAgent:
                 recommended = "transit"
                 daily_cost = 10
         
+        # Helper to safely format time
+        def format_time(val):
+            if isinstance(val, (int, float)):
+                return f"{val:.0f}"
+            return "N/A"
+
         analysis = f"""
 Based on the locations you're visiting:
-- Walking: {mode_data.get('walking', {}).get('avg_time_minutes', 'N/A'):.0f} min average to attractions
-- Public Transit: {mode_data.get('transit', {}).get('avg_time_minutes', 'N/A'):.0f} min average
-- Driving/Taxi: {mode_data.get('driving', {}).get('avg_time_minutes', 'N/A'):.0f} min average
+- Walking: {format_time(mode_data.get('walking', {}).get('avg_time_minutes', 'N/A'))} min average to attractions
+- Public Transit: {format_time(mode_data.get('transit', {}).get('avg_time_minutes', 'N/A'))} min average
+- Driving/Taxi: {format_time(mode_data.get('driving', {}).get('avg_time_minutes', 'N/A'))} min average
 
 **Recommendation:** Use **{recommended}** as your primary mode of transport.
 Estimated daily transport cost: ${daily_cost}
@@ -572,6 +722,7 @@ async def transport_agent_node(state: TravelAgentState) -> Dict[str, Any]:
         traceback.print_exc()
         return {
             "messages": [f"❌ Error planning transport: {str(e)}"],
-            "errors": [f"transport_agent: {str(e)}"]
+            "errors": [f"transport_agent: {str(e)}"],
+            "current_stage": "transport_complete"  # Ensure graph completes even on error
         }
 

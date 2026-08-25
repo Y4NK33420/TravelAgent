@@ -47,11 +47,16 @@ class GoogleRoutesProvider(RouteProvider):
             api_key: Google Maps API key (defaults to settings)
         """
         self.api_key = api_key or settings.google_maps_api_key
-        self.client = googlemaps.Client(key=self.api_key)
+        # Increase timeout to 10s and retry window to 60s
+        self.client = googlemaps.Client(
+            key=self.api_key,
+            timeout=10,
+            retry_timeout=60
+        )
         self.cache = get_cache_service()
         self.cost_tracker = get_cost_tracker()
         
-        logger.info("GoogleRoutesProvider initialized")
+        logger.info("GoogleRoutesProvider initialized with extended timeouts")
     
     async def get_route(
         self,
@@ -133,12 +138,23 @@ class GoogleRoutesProvider(RouteProvider):
             
             logger.info(f"Getting route: {origin_str} → {destination_str} ({mode})")
             
-            # Make API call in executor (sync → async)
+            # Make API call in executor (sync → async) with retries
             loop = asyncio.get_event_loop()
-            directions_result = await loop.run_in_executor(
-                None,
-                lambda: self.client.directions(**params)
-            )
+            directions_result = None
+            
+            for attempt in range(3):
+                try:
+                    directions_result = await loop.run_in_executor(
+                        None,
+                        lambda: self.client.directions(**params)
+                    )
+                    break
+                except (googlemaps.exceptions.Timeout, googlemaps.exceptions.ApiError) as e:
+                    if attempt == 2:
+                        logger.error(f"Google Maps API failed after 3 attempts: {e}")
+                        raise e
+                    logger.warning(f"Google Maps API attempt {attempt + 1} failed: {e}. Retrying...")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
             
             if not directions_result:
                 logger.warning("No route found")
@@ -200,16 +216,27 @@ class GoogleRoutesProvider(RouteProvider):
             
             logger.info(f"Getting travel time matrix: {len(origins)} × {len(destinations)} ({mode})")
             
-            # Make API call
+            # Make API call with retries
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: self.client.distance_matrix(
-                    origins=origins_tuples,
-                    destinations=destinations_tuples,
-                    mode=mode
-                )
-            )
+            result = None
+            
+            for attempt in range(3):
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: self.client.distance_matrix(
+                            origins=origins_tuples,
+                            destinations=destinations_tuples,
+                            mode=mode
+                        )
+                    )
+                    break
+                except (googlemaps.exceptions.Timeout, googlemaps.exceptions.ApiError) as e:
+                    if attempt == 2:
+                        logger.error(f"Google Maps Matrix API failed after 3 attempts: {e}")
+                        raise e
+                    logger.warning(f"Google Maps Matrix API attempt {attempt + 1} failed: {e}. Retrying...")
+                    await asyncio.sleep(2 ** attempt)
             
             if not result or result['status'] != 'OK':
                 logger.error(f"Distance matrix failed: {result.get('status') if result else 'No result'}")

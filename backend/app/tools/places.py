@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-def discover_places(location: str, place_type: str, radius_meters: int = 5000) -> list:
+async def discover_places(location: str, place_type: str, radius_meters: int = 5000) -> list:
     """
     Discovers points of interest near a location.
     
@@ -44,28 +44,23 @@ def discover_places(location: str, place_type: str, radius_meters: int = 5000) -
         discover_places("Rome, Italy", "museum", 3000)
         → Returns list of museums within 3km of Rome city center
     """
-    import asyncio
     try:
         service = get_google_maps_service()
         
-        # First, geocode the location (async method, need to run in sync context)
-        loop = None
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        coords = loop.run_until_complete(service.geocode(location))
+        # First, geocode the location (async method)
+        coords = await service.geocode(location)
         if not coords:
             logger.warning(f"Could not geocode location for discovery: {location}")
             return []
         
-        # Search for nearby places
-        places = service.nearby_search(
+        # Search for nearby places using text search for better relevance
+        # "top {place_type} in {location}" usually yields better results than nearby_search from a centroid
+        query = f"top {place_type} in {location}"
+        
+        places = service.text_search(
+            query=query,
             location={"lat": coords['lat'], "lng": coords['lng']},
-            radius=radius_meters,
-            place_type=place_type
+            radius=radius_meters
         )
         
         if not places:

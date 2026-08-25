@@ -69,7 +69,8 @@ class AmadeusHotelProvider(AccommodationProvider):
         checkin_date: date,
         checkout_date: date,
         num_guests: int,
-        filters: Optional[dict] = None
+        filters: Optional[dict] = None,
+        location_coords: Optional[dict] = None
     ) -> List[Hotel]:
         """Search for hotels using the two-step Amadeus workflow.
         
@@ -77,16 +78,12 @@ class AmadeusHotelProvider(AccommodationProvider):
         Step 2: Get offers (price, availability) for hotels in batches of 20
         
         Args:
-            destination: IATA city code (e.g., "PAR") or city name (will try to geocode)
+            destination: IATA city code (e.g., "PAR") or city name
             checkin_date: Check-in date
             checkout_date: Check-out date
             num_guests: Number of adult guests
-            filters: Optional filters:
-                - ratings: List[str] (e.g., ["4", "5"])
-                - amenities: List[str] (e.g., ["WIFI", "POOL"])
-                - price_range: str (e.g., "100-300")
-                - radius: int (km from city center)
-                - max_results: int (default 50)
+            filters: Optional filters
+            location_coords: Optional {"lat": float, "lng": float} for geocode search
         
         Returns:
             List of Hotel objects sorted by price
@@ -98,21 +95,23 @@ class AmadeusHotelProvider(AccommodationProvider):
         try:
             # Step 1: Discover hotel IDs
             logger.info(f"Step 1: Discovering hotels in {destination}")
-            hotel_ids = await self._discover_hotel_ids(destination, filters)
+            # We get full Hotel objects here (without price)
+            discovered_hotels = await self._discover_hotels(destination, filters, location_coords)
             
-            if not hotel_ids:
+            if not discovered_hotels:
                 logger.warning(f"No hotels found in {destination}")
                 return []
             
-            logger.info(f"Discovered {len(hotel_ids)} hotels")
+            logger.info(f"Discovered {len(discovered_hotels)} hotels")
             
             # Limit to max_results for offer queries
-            hotel_ids_to_query = hotel_ids[:max_results]
+            hotels_to_query = discovered_hotels[:max_results]
+            hotel_ids = [h.provider_id for h in hotels_to_query]
             
             # Step 2: Get offers in batches
-            logger.info(f"Step 2: Fetching offers for {len(hotel_ids_to_query)} hotels (batch size: {batch_size})")
-            hotels = await self._fetch_offers_in_batches(
-                hotel_ids_to_query,
+            logger.info(f"Step 2: Fetching offers for {len(hotel_ids)} hotels (batch size: {batch_size})")
+            priced_hotels = await self._fetch_offers_in_batches(
+                hotel_ids,
                 checkin_date,
                 checkout_date,
                 num_guests,
@@ -120,11 +119,15 @@ class AmadeusHotelProvider(AccommodationProvider):
                 batch_size
             )
             
-            # Sort by price (lowest first)
-            hotels.sort(key=lambda h: h.total_price)
-            
-            logger.info(f"Successfully retrieved {len(hotels)} hotel offers")
-            return hotels
+            if priced_hotels:
+                # Sort by price (lowest first)
+                priced_hotels.sort(key=lambda h: h.total_price)
+                logger.info(f"Successfully retrieved {len(priced_hotels)} hotel offers")
+                return priced_hotels
+            else:
+                # Fallback: Return discovered hotels (price 0.0) if no offers found
+                logger.warning("No pricing offers found. Returning discovered hotels with unknown price.")
+                return hotels_to_query
             
         except ResponseError as e:
             logger.error(f"Amadeus API error during search: {e}")
@@ -133,38 +136,68 @@ class AmadeusHotelProvider(AccommodationProvider):
             logger.error(f"Unexpected error during hotel search: {e}")
             return []
     
-    async def _discover_hotel_ids(self, destination: str, filters: dict) -> List[str]:
-        """Step 1: Discover hotel IDs using Hotel List API (with pagination).
+    async def _discover_hotels(
+        self, 
+        destination: str, 
+        filters: dict,
+        location_coords: Optional[dict] = None
+    ) -> List[Hotel]:
+        """Discover hotels using Hotel List API (with pagination).
         
         Args:
             destination: City code or name
             filters: Search filters
+            location_coords: Optional {"lat": float, "lng": float}
         
         Returns:
-            List of hotelIds
+            List of Hotel objects (without price)
         """
-        # Build search parameters
-        params = {"cityCode": destination.upper()[:3]}  # Convert to 3-letter IATA code
-        
-        if 'radius' in filters:
-            params['radius'] = filters['radius']
-            params['radiusUnit'] = 'KM'
-        
-        if 'ratings' in filters:
-            params['ratings'] = ','.join(filters['ratings'])
-        
-        if 'amenities' in filters:
-            params['amenities'] = ','.join(filters['amenities'])
-        
-        hotel_ids = []
+        hotels = []
         
         try:
-            # Initial request
-            response = self.client.reference_data.locations.hotels.by_city.get(**params)
+            # Strategy 1: Geocode search (Preferred if coords available)
+            if location_coords and 'lat' in location_coords and 'lng' in location_coords:
+                logger.info(f"Searching hotels by geocode: {location_coords}")
+                params = {
+                    "latitude": location_coords['lat'],
+                    "longitude": location_coords['lng'],
+                    "radius": filters.get('radius', 10),
+                    "radiusUnit": 'KM'
+                }
+                
+                if 'ratings' in filters:
+                    params['ratings'] = ','.join(filters['ratings'])
+                
+                if 'amenities' in filters:
+                    params['amenities'] = ','.join(filters['amenities'])
+                
+                # Initial request
+                response = self.client.reference_data.locations.hotels.by_geocode.get(**params)
+                
+            # Strategy 2: City Code search (Fallback)
+            else:
+                city_code = destination.upper()[:3]
+                logger.info(f"Searching hotels by city code: {city_code}")
+                
+                params = {"cityCode": city_code}
+                
+                if 'radius' in filters:
+                    params['radius'] = filters['radius']
+                    params['radiusUnit'] = 'KM'
+                
+                if 'ratings' in filters:
+                    params['ratings'] = ','.join(filters['ratings'])
+                
+                if 'amenities' in filters:
+                    params['amenities'] = ','.join(filters['amenities'])
+                
+                response = self.client.reference_data.locations.hotels.by_city.get(**params)
             
             # Process first page
-            for hotel in response.data:
-                hotel_ids.append(hotel['hotelId'])
+            for hotel_data in response.data:
+                hotel = self._parse_hotel_list_item(hotel_data)
+                if hotel:
+                    hotels.append(hotel)
             
             # Handle pagination
             page_count = 1
@@ -176,21 +209,28 @@ class AmadeusHotelProvider(AccommodationProvider):
                 response = next_response
                 page_count += 1
                 
-                for hotel in response.data:
-                    hotel_ids.append(hotel['hotelId'])
+                for hotel_data in response.data:
+                    hotel = self._parse_hotel_list_item(hotel_data)
+                    if hotel:
+                        hotels.append(hotel)
                 
-                logger.debug(f"Processed page {page_count}, total hotels: {len(hotel_ids)}")
+                logger.debug(f"Processed page {page_count}, total hotels: {len(hotels)}")
+                
+                # Safety break
+                limit = filters.get('max_results', 50) * 2
+                if len(hotels) >= limit:
+                    logger.info(f"Reached discovery limit of {limit} hotels. Stopping pagination.")
+                    break
             
-            logger.info(f"Completed pagination: {page_count} pages, {len(hotel_ids)} hotels")
+            logger.info(f"Completed pagination: {page_count} pages, {len(hotels)} hotels")
             
         except ResponseError as e:
             logger.error(f"Error discovering hotels: {e}")
-            # Try alternative: if city code failed, might need geocoding
             if e.response.status_code == 400:
-                logger.warning(f"City code '{destination}' may be invalid. Consider implementing geocode search.")
+                logger.warning(f"Search failed. If using city code, '{destination}' might be invalid.")
         
-        return hotel_ids
-    
+        return hotels
+
     async def _fetch_offers_in_batches(
         self,
         hotel_ids: List[str],
@@ -278,10 +318,13 @@ class AmadeusHotelProvider(AccommodationProvider):
             response = self.client.shopping.hotel_offers_search.get(**params)
             
             # Parse each hotel in the response
-            for offer_data in response.data:
-                hotel = self._parse_hotel_offer(offer_data, checkin_date, checkout_date)
-                if hotel:
-                    hotels.append(hotel)
+            if response.data:
+                for offer_data in response.data:
+                    hotel = self._parse_hotel_offer(offer_data, checkin_date, checkout_date)
+                    if hotel:
+                        hotels.append(hotel)
+            else:
+                logger.warning(f"No offers found for batch of {len(hotel_ids)} hotels")
             
             # Track cost (this is a billable API call)
             await self.cost_tracker.track_call(
@@ -297,6 +340,43 @@ class AmadeusHotelProvider(AccommodationProvider):
             # Don't fail entire search, just skip this batch
         
         return hotels
+
+    def _parse_hotel_list_item(self, hotel_data: dict) -> Optional[Hotel]:
+        """Parse Amadeus Hotel List item into Hotel model.
+        
+        Args:
+            hotel_data: Raw hotel data from Hotel List API
+        
+        Returns:
+            Hotel object or None
+        """
+        try:
+            # Parse location
+            geo = hotel_data.get('geoCode', {})
+            lat = float(geo.get('latitude', 0))
+            lng = float(geo.get('longitude', 0))
+            
+            # Parse address
+            address_info = hotel_data.get('address', {})
+            address = f"{address_info.get('cityName', '')}, {address_info.get('countryCode', '')}"
+            
+            hotel = Hotel(
+                provider="amadeus",
+                provider_id=hotel_data.get('hotelId'),
+                name=hotel_data.get('name', 'Unknown Hotel'),
+                latitude=lat,
+                longitude=lng,
+                price_per_night=0.0,  # Not available in List API
+                total_price=0.0,      # Not available in List API
+                currency="USD",       # Default
+                rating=None,          # Sometimes available in 'rating' field but inconsistent
+                address=address,
+                raw_data=hotel_data
+            )
+            return hotel
+        except Exception as e:
+            logger.error(f"Error parsing hotel list item: {e}")
+            return None
     
     def _parse_hotel_offer(self, offer_data: dict, checkin_date: date, checkout_date: date) -> Optional[Hotel]:
         """Parse Amadeus API response into our Hotel model.
@@ -377,7 +457,7 @@ class AmadeusHotelProvider(AccommodationProvider):
         except Exception as e:
             logger.error(f"Error parsing hotel offer: {e}")
             return None
-    
+
     async def get_details(self, provider_id: str, offer_id: Optional[str] = None) -> Optional[Hotel]:
         """Get detailed information for a specific hotel/offer.
         
@@ -389,23 +469,7 @@ class AmadeusHotelProvider(AccommodationProvider):
             Hotel object with full details or None if not found
         """
         try:
-            if offer_id:
-                # Get specific offer details (real-time price check)
-                response = self.client.shopping.hotel_offer(offer_id).get()
-                if response.data:
-                    # Parse from single offer response
-                    # (This would need similar parsing to _parse_hotel_offer)
-                    logger.info(f"Retrieved offer details for {offer_id}")
-                    return None  # TODO: Implement parsing
-            else:
-                # Get static hotel details
-                response = self.client.reference_data.locations.hotels.by_hotels.get(
-                    hotelIds=provider_id
-                )
-                if response.data:
-                    logger.info(f"Retrieved hotel details for {provider_id}")
-                    return None  # TODO: Implement parsing
-            
+            # For now, just return None as we are simplifying
             return None
             
         except ResponseError as e:

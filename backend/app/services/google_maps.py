@@ -189,6 +189,44 @@ class GoogleMapsService:
             logger.error(f"Unexpected error during nearby_search: {e}")
             return []
     
+    def text_search(
+        self, 
+        query: str, 
+        location: Optional[dict] = None,
+        radius: Optional[int] = None
+    ) -> list:
+        """
+        Search for places using a text query.
+        
+        Args:
+            query: Text query (e.g., "hotels in Manali")
+            location: Optional bias location {'lat': float, 'lng': float}
+            radius: Optional bias radius in meters
+            
+        Returns:
+            List of places
+        """
+        try:
+            # Build search parameters
+            search_params = {'query': query}
+            
+            if location and radius:
+                search_params['location'] = (location['lat'], location['lng'])
+                search_params['radius'] = radius
+            
+            result = self.client.places(**search_params)
+            
+            places = result.get('results', [])
+            logger.info(f"Found {len(places)} places for query '{query}'")
+            return places
+            
+        except ApiError as e:
+            logger.error(f"Google Maps API error during text_search: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error during text_search: {e}")
+            return []
+
     def place_details(self, place_id: str, fields: Optional[list] = None) -> Optional[dict]:
         """
         Retrieve detailed information for a specific place.

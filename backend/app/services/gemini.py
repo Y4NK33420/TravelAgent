@@ -18,10 +18,33 @@ class GeminiService:
     """Client for Google Gemini API."""
     
     def __init__(self):
-        """Initialize the Gemini client with API key from settings."""
-        genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        logger.info("GeminiService initialized with gemini-2.0-flash-exp model")
+        """Initialize the Gemini client with API keys from settings."""
+        self.api_keys = settings.gemini_api_keys
+        if not self.api_keys:
+            logger.warning("No Gemini API keys found in settings!")
+            # Fallback to single key if property fails for some reason
+            if settings.gemini_api_key:
+                self.api_keys = [settings.gemini_api_key]
+        
+        self.current_key_index = 0
+        self._configure_client()
+        logger.info(f"GeminiService initialized with {len(self.api_keys)} keys")
+
+    def _configure_client(self):
+        """Configure the Gemini client with the current API key."""
+        current_key = self.api_keys[self.current_key_index]
+        genai.configure(api_key=current_key)
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        # logger.info(f"Switched to Gemini API key index: {self.current_key_index}")
+
+    def _rotate_key(self):
+        """Rotate to the next available API key."""
+        if len(self.api_keys) > 1:
+            self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
+            self._configure_client()
+            logger.info(f"Rotated Gemini API key to index {self.current_key_index}")
+            return True
+        return False
     
     def generate(
         self, 
@@ -69,6 +92,12 @@ class GeminiService:
             
             # Check if it's a rate limit error (429)
             if "429" in error_str or "quota" in error_str or "rate limit" in error_str:
+                # Try rotating key first
+                if self._rotate_key():
+                    logger.warning(f"Gemini API rate limit hit, rotated key and retrying...")
+                    return self.generate(prompt, temperature, max_output_tokens, retry_count)
+                
+                # If no more keys or rotation didn't help, try backoff
                 if retry_count < 2:  # Try up to 2 retries
                     wait_time = (2 ** retry_count) * 2  # Exponential backoff: 2s, 4s
                     logger.warning(f"Gemini API rate limit hit, waiting {wait_time}s before retry {retry_count + 1}/2")
@@ -85,7 +114,7 @@ class GeminiService:
         self, 
         prompt: str, 
         temperature: float = 0.1,
-        max_output_tokens: int = 2048,
+        max_output_tokens: int = 8192,
         retry_count: int = 0
     ) -> dict:
         """
@@ -161,6 +190,11 @@ class GeminiService:
             
             # Check if it's a rate limit error (429)
             if "429" in error_str or "quota" in error_str or "rate limit" in error_str:
+                # Try rotating key first
+                if self._rotate_key():
+                    logger.warning(f"Gemini API rate limit hit, rotated key and retrying...")
+                    return self.generate_structured(prompt, temperature, max_output_tokens, retry_count)
+
                 if retry_count < 2:  # Try up to 2 retries
                     wait_time = (2 ** retry_count) * 2  # Exponential backoff: 2s, 4s
                     logger.warning(f"Gemini API rate limit hit, waiting {wait_time}s before retry {retry_count + 1}/2")

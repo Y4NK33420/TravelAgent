@@ -10,9 +10,14 @@ from app.api.routes import router
 from app.api.routes_monitoring import router_monitoring
 
 # Configure logging
+# Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper()),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("backend.log", mode='a', encoding='utf-8')
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -137,9 +142,13 @@ app = FastAPI(
 
 
 # CORS middleware for frontend integration
+# Supports both local development and ngrok tunnels
+cors_origins = settings.all_cors_origins
+logger.info(f"CORS enabled for origins: {cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -148,9 +157,11 @@ app.add_middleware(
 
 # Include API routes
 from app.api.routes_v2 import router_v2
+from app.api.routes_planning import router as router_planning
 
 app.include_router(router)  # V1 routes (Phase 1)
 app.include_router(router_v2)  # V2 routes (Phase 2.2)
+app.include_router(router_planning)  # Interactive Planning routes
 app.include_router(router_monitoring)  # Monitoring routes (Phase 2.4)
 
 

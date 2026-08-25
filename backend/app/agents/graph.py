@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 
 from app.models.state import TravelAgentState
-from app.agents.intake import extract_constraints
+from app.agents.intake import extract_constraints, refine_constraints
 from app.agents.discovery import discovery_agent, filter_pois_by_must_see
 from app.agents.optimizer import optimize_itinerary_node
 from app.agents.accommodation import accommodation_agent_node
@@ -18,57 +18,75 @@ from app.tools.geocoding import geocode_location
 
 logger = logging.getLogger(__name__)
 
+# ...
 
-def intake_node(state: TravelAgentState) -> dict:
+async def intake_node(state: TravelAgentState) -> dict:
     """
-    Intake Node: Extract trip constraints from user message.
+    Intake Node: Extract or refine trip constraints.
     
-    This node uses the Intake Agent to parse the user's natural language
-    input and extract structured trip constraints.
+    Handles both:
+    1. V1: Natural language extraction
+    2. V2: Structured input refinement (using 'interests' context)
     """
     try:
         messages = state.get('messages', [])
-        if not messages:
-            logger.error("No messages in state for intake node")
-            return {
-                "error_message": "No user message provided",
-                "current_stage": "error"
-            }
+        existing_constraints = state.get('constraints', {})
         
-        # Get the last user message
-        last_message = messages[-1]
-        if hasattr(last_message, 'content'):
-            user_text = last_message.content
+        # Check if we have structured data (V2 path)
+        # We assume if 'budget' or 'travelers' is present, it's structured
+        is_structured = bool(existing_constraints and (existing_constraints.get('budget') or existing_constraints.get('travelers')))
+        
+        final_constraints = {}
+        
+        if is_structured:
+            logger.info("Intake node: Processing structured V2 input")
+            # If we have an 'interests' string, use it to refine/extract implicit preferences
+            interests = existing_constraints.get('interests')
+            if interests:
+                logger.info(f"Refining constraints with interests: {interests}")
+                # We pass the interests as the 'additional_message' to refine_constraints
+                refined = refine_constraints(existing_constraints, interests)
+                final_constraints = refined if refined else existing_constraints
+            else:
+                final_constraints = existing_constraints
+                
         else:
-            user_text = str(last_message)
+            # V1 Legacy Path: Extract from message
+            if not messages:
+                logger.error("No messages in state for intake node")
+                return {
+                    "error_message": "No user message provided",
+                    "current_stage": "error"
+                }
+            
+            last_message = messages[-1]
+            user_text = last_message.content if hasattr(last_message, 'content') else str(last_message)
+            
+            logger.info(f"Intake node processing V1 message: {user_text[:100]}...")
+            final_constraints = extract_constraints(user_text)
         
-        logger.info(f"Intake node processing message: {user_text[:100]}...")
-        
-        # Extract constraints using Intake Agent
-        constraints = extract_constraints(user_text)
-        
-        if not constraints:
-            logger.error("Failed to extract constraints")
+        if not final_constraints:
+            logger.error("Failed to extract/refine constraints")
             return {
-                "error_message": "Could not understand trip requirements. Please provide destination and preferences.",
+                "error_message": "Could not understand trip requirements.",
                 "current_stage": "error"
             }
         
-        logger.info(f"Successfully extracted constraints for: {constraints.get('destination')}")
+        logger.info(f"Final constraints for: {final_constraints.get('destination')}")
         
         # Geocode the destination
-        destination = constraints.get('destination')
+        destination = final_constraints.get('destination')
         destination_coords = None
         if destination:
             try:
-                coords = geocode_location.invoke({"location": destination})
+                coords = await geocode_location.ainvoke({"location": destination})
                 if coords and 'error' not in coords:
                     destination_coords = coords
                     logger.info(f"Geocoded destination: {destination}")
             except Exception as e:
                 logger.warning(f"Could not geocode destination: {e}")
         
-        # Add AI message to conversation
+        # Add AI message
         ai_response = AIMessage(
             content=f"Great! I'll help you plan your trip to {destination}. "
                     f"Let me find the best places for you..."
@@ -76,7 +94,7 @@ def intake_node(state: TravelAgentState) -> dict:
         
         return {
             "messages": [ai_response],
-            "constraints": constraints,
+            "constraints": final_constraints,
             "destination_coords": destination_coords,
             "current_stage": "intake_complete",
             "error_message": None
@@ -90,7 +108,7 @@ def intake_node(state: TravelAgentState) -> dict:
         }
 
 
-def discovery_node(state: TravelAgentState) -> dict:
+async def discovery_node(state: TravelAgentState) -> dict:
     """
     Discovery Node: Find and score POIs based on constraints.
     
@@ -109,7 +127,7 @@ def discovery_node(state: TravelAgentState) -> dict:
         logger.info("Discovery node starting POI search...")
         
         # Run discovery agent
-        result = discovery_agent(constraints)
+        result = await discovery_agent(constraints)
         
         potential_pois = result.get('potential_pois', [])
         error_message = result.get('error_message')
@@ -181,7 +199,7 @@ def should_continue(state: TravelAgentState) -> str:
     elif current_stage == 'optimization_complete':
         # Phase 2.3: Route to accommodation after optimization
         return 'accommodation'
-    elif current_stage == 'optimization_retry':
+    elif current_stage == 'retrying_optimization':
         # Retry optimization with adjusted parameters
         return 'optimizer'
     elif current_stage == 'accommodation_complete':
@@ -190,8 +208,12 @@ def should_continue(state: TravelAgentState) -> str:
     elif current_stage == 'transport_complete':
         # Complete trip planning
         return 'end'
-    elif current_stage in ['complete', 'no_pois', 'needs_user_clarification',
-                          'needs_user_input_for_constraints', 'error', 'optimization_failed']:
+    elif current_stage in ['needs_user_input_for_constraints', 'optimization_failed']:
+        # If optimization fails, still proceed to accommodation/transport
+        # so we at least return hotels and flights
+        logger.info(f"Optimization failed/incomplete ({current_stage}), proceeding to accommodation anyway")
+        return 'accommodation'
+    elif current_stage in ['complete', 'no_pois', 'needs_user_clarification', 'error']:
         return 'end'
     else:
         # Default to end for unknown stages

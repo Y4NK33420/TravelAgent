@@ -29,6 +29,7 @@ class Hotel:
     rating: Optional[float] = None  # 0-5 scale
     review_count: Optional[int] = None
     photo_url: Optional[str] = None
+    photos: List[dict] = None  # List of photo objects from provider
     amenities: List[str] = None
     cancellation_policy: Optional[str] = None
     address: Optional[str] = None
@@ -241,6 +242,11 @@ class RouteProvider(ABC):
             from origins[i] to destinations[j], or None on error
         """
         pass
+
+
+
+
+
 
 
 

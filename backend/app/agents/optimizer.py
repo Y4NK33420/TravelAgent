@@ -50,7 +50,7 @@ def optimize_itinerary_node(state: TravelAgentState) -> Dict:
         opt_params = {
             'day_start_hour': 9,
             'day_end_hour': 22,
-            'travel_mode': 'walking',
+            'travel_mode': 'transit', # Changed from 'walking' to 'transit' as safer default
             'strict_mode': False,
             'optimization_goal': 'balanced'
         }

@@ -45,88 +45,20 @@ class AuthResponse(BaseModel):
     user_id: str
     email: str
 
-class TripCreateRequest(BaseModel):
-    """Create trip request."""
-    destination: str
-    constraints: Optional[dict] = None
+from app.models.schemas import TripCreateRequestV2, TripResponse, SemanticSearchRequest, SemanticSearchResponse
+from app.agents.graph import get_travel_agent_graph
+from langchain_core.messages import HumanMessage
+import uuid
+from app.api.deps import get_current_user, create_access_token
 
-class TripResponse(BaseModel):
-    """Trip response."""
-    trip_id: str
-    destination: str
-    status: str
-    current_stage: Optional[str]
-    created_at: str
-    updated_at: str
-
-class SemanticSearchRequest(BaseModel):
-    """Semantic POI search request."""
-    query: str
-    limit: int = 20
-    category: Optional[str] = None
-
-class SemanticSearchResponse(BaseModel):
-    """Semantic search response."""
-    results: List[dict]
-    total: int
-    query: str
-
-# ==================== Authentication ====================
-
-def create_access_token(data: dict) -> str:
-    """Create JWT access token."""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expiration_minutes)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm
-    )
-    return encoded_jwt
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    session: AsyncSession = Depends(get_session)
-) -> str:
-    """
-    Dependency to get current authenticated user.
-    
-    Returns user_id from JWT token.
-    """
-    try:
-        token = credentials.credentials
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm]
-        )
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials"
-            )
-        return user_id
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
-        )
-
-# ==================== User Endpoints ====================
+# ==================== Auth Endpoints ====================
 
 @router_v2.post("/auth/register", response_model=AuthResponse)
-async def register_user(
+async def register(
     request: UserRegisterRequest,
     session: AsyncSession = Depends(get_session)
 ):
-    """
-    Register a new user.
-    
-    Creates a user account with email and password.
-    Returns JWT token for authentication.
-    """
+    """Register a new user."""
     db = DatabaseService(session)
     
     # Check if user exists
@@ -145,10 +77,8 @@ async def register_user(
         preferences=request.preferences
     )
     
-    # Generate token
+    # Create token
     access_token = create_access_token(data={"sub": user.id})
-    
-    logger.info(f"New user registered: {user.email}")
     
     return AuthResponse(
         access_token=access_token,
@@ -157,16 +87,11 @@ async def register_user(
     )
 
 @router_v2.post("/auth/login", response_model=AuthResponse)
-async def login_user(
+async def login(
     request: UserLoginRequest,
     session: AsyncSession = Depends(get_session)
 ):
-    """
-    User login.
-    
-    Authenticates user with email and password.
-    Returns JWT token.
-    """
+    """Login user."""
     db = DatabaseService(session)
     
     # Get user
@@ -174,20 +99,18 @@ async def login_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            detail="Invalid credentials"
         )
     
     # Verify password
     if not await db.verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            detail="Invalid credentials"
         )
     
-    # Generate token
+    # Create token
     access_token = create_access_token(data={"sub": user.id})
-    
-    logger.info(f"User logged in: {user.email}")
     
     return AuthResponse(
         access_token=access_token,
@@ -195,49 +118,66 @@ async def login_user(
         email=user.email
     )
 
-@router_v2.get("/users/me")
-async def get_current_user_info(
-    user_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
-):
-    """Get current user's information."""
-    db = DatabaseService(session)
-    
-    user = await db.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    return {
-        "user_id": user.id,
-        "email": user.email,
-        "full_name": user.full_name,
-        "preferences": user.preferences,
-        "created_at": user.created_at.isoformat()
-    }
-
-# ==================== Trip Management Endpoints ====================
+# ... (keep other models)
 
 @router_v2.post("/trips", response_model=TripResponse)
 async def create_trip(
-    request: TripCreateRequest,
+    request: TripCreateRequestV2,
     user_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
     """
-    Create a new trip.
+    Create a new trip (V2).
     
-    Initializes a trip with destination and constraints.
+    Initializes a trip with structured destination and constraints.
+    Triggers the LangGraph workflow with the structured data.
     """
     db = DatabaseService(session)
+    trip_id = str(uuid.uuid4())
     
+    # Create initial state for Graph
+    # We construct a synthetic user message from the structured data for the Intake agent (hybrid approach)
+    # But we also pass the raw constraints so Intake can just use them.
+    
+    constraints_dict = request.constraints.model_dump() if request.constraints else {}
+    constraints_dict['destination'] = request.destination
+    
+    # Create a prompt-like message for context
+    interests = constraints_dict.get('interests', '')
+    user_message = f"Trip to {request.destination}. Interests: {interests}"
+    
+    initial_state = {
+        "messages": [HumanMessage(content=user_message)],
+        "current_stage": "start",
+        "constraints": constraints_dict,  # Pass structured constraints directly
+        "potential_pois": [],
+        "itinerary": [],
+        "available_hotels": [],
+        "trip_id": trip_id,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    # Run the graph
+    logger.info(f"Running graph for trip {trip_id} (V2)...")
+    graph = get_travel_agent_graph()
+    result = await graph.ainvoke(initial_state)
+    
+    # Extract results
+    final_constraints = result.get('constraints', {})
+    
+    # Persist to DB
     trip = await db.create_trip(
         user_id=user_id,
+        trip_id=trip_id,
         destination=request.destination,
-        constraints=request.constraints
+        constraints=final_constraints,
+        destination_lat=result.get('destination_coords', {}).get('lat'),
+        destination_lng=result.get('destination_coords', {}).get('lng')
     )
+    
+    # Save full state
+    persistence = StatePersistenceService(session)
+    await persistence.save_trip_state(trip_id, result)
     
     logger.info(f"Created trip {trip.id} for user {user_id}")
     
@@ -513,4 +453,27 @@ async def get_user_stats(
 
 
 
+
+
+
+
+
+@router_v2.get("/users/me", response_model=AuthResponse)
+async def read_users_me(
+    current_user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get current user details."""
+    db = DatabaseService(session)
+    user = await db.get_user_by_id(current_user)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # We return AuthResponse structure for consistency with login/register
+    # but without a new token (unless we want to refresh it)
+    return AuthResponse(
+        access_token="", # Not needed for profile fetch
+        user_id=user.id,
+        email=user.email
+    )
 
