@@ -13,7 +13,7 @@ desktop.ini
 
 # ---- Logs ----
 logs/
-*.log
+# *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -69,6 +69,22 @@ cython_debug/
 *.db
 *.db-journal
 
+# ---- Local Archive &ephemeral tools ----
+.local_archive/
+ngrok.exe
+
+# ---- Additional log & output dumps ----
+*.log
+backend/backend.log
+*_output.txt
+verify_*.txt
+trips_report.txt
+*.json_debug
+
+# ---- Build artifacts ----
+frontend/build/
+frontend/dist/
+
 # ---- Node / Vite (frontend) ----
 node_modules/
 # Vite
@@ -84,3 +100,4 @@ coverage/
 # ---- System files ----
 # Git
 .gitignore~
+
